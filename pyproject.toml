@@ -1,0 +1,38 @@
+[project]
+name = "claude-conversations"
+version = "0.1.0"
+description = "Local browser, full-text/fuzzy/semantic search over exported Claude conversations"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "flask>=3.1.3",
+    "psycopg[binary]>=3.3.4",
+    "markdown>=3.10.2",
+    "pyyaml>=6.0.3",
+    "python-dotenv>=1.2.2",
+    "tqdm>=4.68.4",
+]
+
+[project.optional-dependencies]
+# Semantic search via local MLX embedding model (Apple Silicon).
+# Kept optional so the keyword/fuzzy search tool installs light;
+# only needed for `cc-embed` and `mode=semantic`.
+semantic = [
+    "mlx>=0.32",
+    "mlx-lm>=0.31.3",
+    "numpy>=2.5.1",
+]
+
+[project.scripts]
+cc-initdb = "claude_conversations.cli:initdb_main"
+cc-index = "claude_conversations.cli:index_main"
+cc-embed = "claude_conversations.cli:embed_main"
+cc-status = "claude_conversations.cli:status_main"
+cc-web = "claude_conversations.cli:web_main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claude_conversations"]

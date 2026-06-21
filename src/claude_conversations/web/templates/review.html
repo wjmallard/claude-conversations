@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Review proposals{% endblock %}
+{% block content %}
+
+<div class="reviewhead">
+  <div class="rhrow">
+    <h1>Review proposals <span class="muted">· <span id="pending-count">{{ total }}</span> pending</span></h1>
+    <form class="rerun" method="post" action="{{ url_for('review_rerun') }}">
+      <input type="hidden" name="category" value="{{ category or '' }}">
+      <button class="btn-rerun" type="submit" title="Recompute predictions from your confirmed labels (a few seconds)">↻ Re-run predictions</button>
+    </form>
+  </div>
+  <p class="muted hint">Click chips to adjust, then <b>Confirm</b> to accept or <b>Dismiss</b> to reject — saves instantly, no clicking in. The dashed chip is the predicted match. Re-run after confirming a batch to fold your labels back in.</p>
+  <nav class="tagbar">
+    <a class="tagfilter {{ 'on' if not category }}" href="{{ url_for('review', df=df or none, dt=dt or none, q=q or none) }}">all <span class="n">{{ counts.values() | sum }}</span></a>
+    {% for c in categories_vocab %}
+      {% if counts.get(c.slug) %}
+      <a class="tagfilter tag-{{ c.slug }} {{ 'on' if category == c.slug }}" href="{{ url_for('review', category=c.slug, df=df or none, dt=dt or none, q=q or none) }}">{{ c.label }} <span class="n">{{ counts.get(c.slug) }}</span></a>
+      {% endif %}
+    {% endfor %}
+  </nav>
+</div>
+
+{% if not cards %}
+  <p class="muted">No proposals to review{% if category %} in this category{% endif %}. 🎉</p>
+{% endif %}
+
+<ul class="reviewlist">
+  {% for card in cards %}
+  <li class="rcard" data-uuid="{{ card.uuid }}">
+    <div class="rcard-head">
+      <a class="title" href="{{ url_for('conversation', uuid=card.uuid) }}" target="_blank" rel="noopener">{{ card.meta.name or '(untitled)' }} ↗</a>
+      <span class="meta">{{ card.meta.created_at | fmt_ts }} · {{ card.meta.n_messages }} msgs</span>
+    </div>
+    <div class="rchips">
+      {% for c in categories_vocab %}
+        {% set on = c.slug in card.proposed or c.slug in card.other %}
+        {% set prop = c.slug in card.proposed %}
+        <span class="rchip tag-{{ c.slug }} {{ 'on' if on }} {{ 'proposal' if prop }}" data-slug="{{ c.slug }}">{{ c.label }}{% if prop %} <span class="conf">{{ '%.2f' | format(card.proposed[c.slug]) }}</span>{% endif %}</span>
+      {% endfor %}
+    </div>
+    <div class="rcard-actions">
+      <button class="btn-confirm" data-act="confirm">✓ Confirm</button>
+      <button class="btn-dismiss" data-act="dismiss">✗ Dismiss</button>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+
+{% if total_pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a href="{{ url_for('review', category=category, df=df or none, dt=dt or none, q=q or none, page=page-1) }}">‹ prev</a>{% endif %}
+  {% for p in pages %}
+    {% if p is none %}<span class="gap">…</span>
+    {% elif p == page %}<span class="cur">{{ p }}</span>
+    {% else %}<a href="{{ url_for('review', category=category, df=df or none, dt=dt or none, q=q or none, page=p) }}">{{ p }}</a>{% endif %}
+  {% endfor %}
+  {% if page < total_pages %}<a href="{{ url_for('review', category=category, df=df or none, dt=dt or none, q=q or none, page=page+1) }}">next ›</a>{% endif %}
+</nav>
+{% endif %}
+
+<script>
+(function () {
+  var TAGS_URL = "{{ url_for('set_tags', uuid='UUID') }}";
+  var pending = document.getElementById('pending-count');
+  var navbadge = document.querySelector('.reviewlink .rn');
+  function dec() {
+    [pending, navbadge].forEach(function (el) {
+      if (!el) return;
+      var n = parseInt(el.textContent, 10);
+      if (!isNaN(n)) el.textContent = Math.max(0, n - 1);
+    });
+  }
+  function chipsOn(card) {
+    return Array.prototype.map.call(card.querySelectorAll('.rchip.on'), function (c) { return c.dataset.slug; });
+  }
+  function resolve(card, slugs) {
+    var body = new URLSearchParams();
+    slugs.forEach(function (s) { body.append('category', s); });
+    body.append('ajax', '1');
+    card.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    fetch(TAGS_URL.replace('UUID', card.dataset.uuid), { method: 'POST', body: body })
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function () {
+        card.classList.add('done');
+        setTimeout(function () { card.remove(); if (!document.querySelector('.rcard')) location.reload(); }, 220);
+        dec();
+      })
+      .catch(function () {
+        card.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+        alert('Save failed — is the server up?');
+      });
+  }
+  document.querySelectorAll('.rcard').forEach(function (card) {
+    card.querySelectorAll('.rchip').forEach(function (chip) {
+      chip.addEventListener('click', function () { chip.classList.toggle('on'); });
+    });
+    card.querySelector('[data-act=confirm]').addEventListener('click', function () {
+      resolve(card, chipsOn(card));
+    });
+    card.querySelector('[data-act=dismiss]').addEventListener('click', function () {
+      card.querySelectorAll('.rchip.proposal').forEach(function (c) { c.classList.remove('on'); });
+      resolve(card, chipsOn(card));
+    });
+  });
+  var rerunForm = document.querySelector('.rerun');
+  if (rerunForm) rerunForm.addEventListener('submit', function () {
+    var b = rerunForm.querySelector('button');
+    b.disabled = true; b.textContent = '↻ Re-running…';
+  });
+  // instant client-side title filter (the top search box) — hides non-matching cards
+  // on the current page as you type; Enter still submits for a full server-side filter.
+  var qbox = document.querySelector('.search input[name=q]');
+  if (qbox) qbox.addEventListener('input', function () {
+    var s = qbox.value.toLowerCase();
+    document.querySelectorAll('.rcard').forEach(function (card) {
+      var t = (card.querySelector('.title').textContent || '').toLowerCase();
+      card.style.display = t.indexOf(s) === -1 ? 'none' : '';
+    });
+  });
+})();
+</script>
+{% endblock %}

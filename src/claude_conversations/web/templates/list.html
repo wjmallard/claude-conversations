@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% set mode_labels = {'word': 'Keyword', 'char': 'Fuzzy', 'semantic': 'Semantic'} %}
+{% block title %}{% if q %}{{ q }} — {% endif %}Claude Conversations{% endblock %}
+{% block content %}
+
+{% if categories_vocab %}
+<nav class="tagbar">
+  <a class="tagfilter {{ 'on' if not category and not q }}" href="{{ url_for('index', df=df or none, dt=dt or none) }}">all <span class="n">{{ total_indexed }}</span></a>
+  {% for c in categories_vocab %}
+    <a class="tagfilter {{ 'on' if category == c.slug }}" href="{{ url_for('index', category=c.slug, df=df or none, dt=dt or none) }}">{{ c.label }} <span class="n">{{ facets.get(c.slug, 0) }}</span></a>
+  {% endfor %}
+  <a class="tagfilter {{ 'on' if category == '__untagged__' }}" href="{{ url_for('index', category='__untagged__', df=df or none, dt=dt or none) }}">untagged <span class="n">{{ untagged }}</span></a>
+</nav>
+{% endif %}
+
+<div class="toolbar">
+  <div class="count">
+    {% if q %}
+      {{ total }} match{{ 'es' if total != 1 else '' }} <span class="muted">· {{ mode_labels[mode] }}</span>
+    {% elif category == '__untagged__' %}
+      {{ total }} <span class="muted">· untagged</span>
+    {% elif category %}
+      {{ total }} <span class="muted">· {{ category_label.get(category, category) }}</span>
+    {% else %}
+      {{ total }} conversations
+    {% endif %}
+    {% if df or dt %}
+      <span class="datewin">📅 {{ df or '…' }} – {{ dt or '…' }}
+        <a href="{{ url_for('index', q=q or none, mode=mode, sort=sort, category=category) }}" title="clear date filter">×</a></span>
+    {% endif %}
+  </div>
+  <div class="sorts">sort:
+    {% if q %}
+      {% set opts = [('best','best'), ('newest','newest'), ('oldest','oldest'), ('title','title')] %}
+    {% else %}
+      {% set opts = [('recent','recent'), ('created','created'), ('oldest','oldest'), ('title','title'), ('messages','messages')] %}
+    {% endif %}
+    {% for key, label in opts %}
+      <a class="{{ 'on' if sort == key else '' }}" href="{{ url_for('index', q=q or none, mode=mode, sort=key, category=category, df=df or none, dt=dt or none, field=search_fields, page=1) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<ul class="convlist">
+  {% for r in results %}
+  <li>
+    <a class="title" href="{{ url_for('conversation', uuid=r.uuid) }}">{{ r.name or '(untitled)' }}</a>
+    {% if r.categories %}<span class="tags">{% for s in r.categories %}<span class="tag tag-{{ s }} {{ 'proposal' if tag_methods.get(r.uuid, {}).get(s) == 'semantic' }}">{{ category_label.get(s, s) }}</span>{% endfor %}</span>{% endif %}
+    <div class="meta">
+      {{ (r.updated_at or r.created_at) | fmt_ts }} · {{ r.n_messages }} msgs
+      {% if r.score is not none %} · <span class="muted">score {{ '%.3f' | format(r.score) }}</span>{% endif %}
+    </div>
+    {% if r.snippet %}<div class="snip">{{ r.snippet | highlight }}</div>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% if not results %}<p class="muted">No {{ 'matches' if q else 'conversations' }}{% if df or dt %} in that date range{% endif %}.</p>{% endif %}
+
+{% if total_pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a href="{{ url_for('index', q=q or none, mode=mode, sort=sort, category=category, df=df or none, dt=dt or none, field=search_fields, page=page-1) }}">‹ prev</a>{% endif %}
+  {% for p in pages %}
+    {% if p is none %}<span class="gap">…</span>
+    {% elif p == page %}<span class="cur">{{ p }}</span>
+    {% else %}<a href="{{ url_for('index', q=q or none, mode=mode, sort=sort, category=category, df=df or none, dt=dt or none, field=search_fields, page=p) }}">{{ p }}</a>{% endif %}
+  {% endfor %}
+  {% if page < total_pages %}<a href="{{ url_for('index', q=q or none, mode=mode, sort=sort, category=category, df=df or none, dt=dt or none, field=search_fields, page=page+1) }}">next ›</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

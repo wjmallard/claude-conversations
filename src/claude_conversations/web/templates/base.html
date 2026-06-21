@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Claude Conversations{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <form class="search" action="{{ url_for('review') if request.endpoint == 'review' else url_for('index') }}" method="get" role="search">
+    {% set m = request.args.get('mode', 'word') %}
+    <div class="searchrow">
+      <a class="brand" href="{{ url_for('index') }}" title="all conversations">💬</a>
+      <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search your conversations…" autofocus>
+      <button type="submit">Search</button>
+      <a class="reviewlink" href="{{ url_for('review') }}">Review{% if review_count %} <span class="rn">{{ review_count }}</span>{% endif %}</a>
+    </div>
+    <div class="filters">
+      {% if request.endpoint != 'review' %}
+      <div class="frow">
+        <span class="rlabel">Type</span>
+        <div class="modes">
+          <label class="chip {{ 'on' if m == 'word' else '' }}"><input type="radio" name="mode" value="word" {{ 'checked' if m == 'word' }}>Keyword</label>
+          <label class="chip {{ 'on' if m == 'char' else '' }}"><input type="radio" name="mode" value="char" {{ 'checked' if m == 'char' }}>Fuzzy</label>
+          <label class="chip {{ 'on' if m == 'semantic' else '' }}"><input type="radio" name="mode" value="semantic" {{ 'checked' if m == 'semantic' }}>Semantic</label>
+        </div>
+      </div>
+      <div class="frow">
+        <span class="rlabel">Fields</span>
+        <span class="fields">
+          {% for f, lbl in [('you','User'), ('assistant','Agent'), ('title','Title'), ('summary','Summary'), ('tools','Tools')] %}
+            <label class="fchip {{ 'on' if f in search_fields }} {{ 'off' if f not in search_fields_applicable }}">
+              <input type="checkbox" name="field" value="{{ f }}" {{ 'checked' if f in search_fields }} {{ 'disabled' if f not in search_fields_applicable }}>{{ lbl }}
+            </label>
+          {% endfor %}
+        </span>
+      </div>
+      {% endif %}
+      <div class="frow">
+        <span class="rlabel">Range</span>
+        <span class="daterange">
+          <input type="date" name="df" value="{{ request.args.get('df','') }}" aria-label="messages from date">
+          <span class="dash">–</span>
+          <input type="date" name="dt" value="{{ request.args.get('dt','') }}" aria-label="messages to date">
+        </span>
+      </div>
+    </div>
+    <input type="hidden" name="category" value="{{ request.args.get('category','') }}">
+  </form>
+</header>
+<main class="wrap">{% block content %}{% endblock %}</main>
+<script>
+  (function () {
+    var FIELDS_BY_MODE = { word: ['title','summary','you','assistant','tools'],
+                           char: ['title','summary','you','assistant','tools'],
+                           semantic: ['you','assistant'] };
+    // On mode change, fields irrelevant to the new mode first deselect, then deactivate.
+    function syncFields(mode) {
+      var allowed = FIELDS_BY_MODE[mode] || [];
+      document.querySelectorAll('.fields input[name=field]').forEach(function (cb) {
+        var chip = cb.closest('.fchip');
+        if (allowed.indexOf(cb.value) === -1) {
+          cb.checked = false; cb.disabled = true;
+          chip.classList.remove('on'); chip.classList.add('off');
+        } else {
+          cb.disabled = false; chip.classList.remove('off');
+          chip.classList.toggle('on', cb.checked);
+        }
+      });
+    }
+    // search-mode chips: keep the highlight synced (works even if cached CSS lacks
+    // :has()), update field availability, and auto-run search.
+    document.querySelectorAll('.modes input[name=mode]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        el.closest('.modes').querySelectorAll('.chip').forEach(function (c) { c.classList.remove('on'); });
+        el.closest('.chip').classList.add('on');
+        syncFields(el.value);
+        var form = el.closest('form');
+        var q = form.querySelector('input[name=q]');
+        if (q && q.value.trim()) form.submit();
+      });
+    });
+    // field chips: live highlight on toggle
+    document.querySelectorAll('.fields input[name=field]').forEach(function (cb) {
+      cb.addEventListener('change', function () { cb.closest('.fchip').classList.toggle('on', cb.checked); });
+    });
+    // tag editor: toggle highlight + auto-save instantly (matches the review page)
+    var tagEdit = document.querySelector('.tag-edit');
+    if (tagEdit) {
+      var tagSaved = tagEdit.querySelector('.tag-saved');
+      tagEdit.querySelectorAll('input[type=checkbox]').forEach(function (el) {
+        el.addEventListener('change', function () {
+          el.closest('.tag-opt').classList.toggle('on', el.checked);
+          var body = new URLSearchParams();
+          tagEdit.querySelectorAll('input[type=checkbox]:checked').forEach(function (cb) { body.append('category', cb.value); });
+          body.append('ajax', '1');
+          fetch(tagEdit.action, { method: 'POST', body: body })
+            .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+            .then(function () {
+              if (tagSaved) { tagSaved.textContent = 'saved ✓'; tagSaved.classList.add('show'); setTimeout(function () { tagSaved.classList.remove('show'); }, 1400); }
+            })
+            .catch(function () { if (tagSaved) { tagSaved.textContent = 'save failed'; tagSaved.classList.add('show'); } });
+        });
+      });
+    }
+  })();
+</script>
+</body>
+</html>

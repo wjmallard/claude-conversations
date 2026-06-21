@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ meta.name or 'Conversation' }}{% endblock %}
+{% block content %}
+<div class="convhead">
+  <a class="back" href="{{ url_for('index') }}">← all conversations</a>
+  <h1>{{ meta.name or '(untitled)' }}</h1>
+  <div class="meta">
+    {{ meta.created_at | fmt_ts }}{% if meta.updated_at %} → {{ meta.updated_at | fmt_ts }}{% endif %}
+    · {{ meta.n_messages }} messages
+    · <a href="{{ url_for('raw', uuid=uuid) }}" target="_blank" rel="noopener">raw</a>
+  </div>
+  {% if meta.summary %}<p class="summary">{{ meta.summary }}</p>{% endif %}
+
+  {% if categories_vocab %}
+  <form class="tag-edit" id="tags" method="post" action="{{ url_for('set_tags', uuid=uuid) }}">
+    <span class="tag-edit-label">tags</span>
+    {% for c in categories_vocab %}
+      {% set on = c.slug in (meta.categories or []) %}
+      {% set prop = tag_methods.get(uuid, {}).get(c.slug) == 'semantic' %}
+      <label class="tag-opt tag-{{ c.slug }} {{ 'on' if on }} {{ 'proposal' if prop }}">
+        <input type="checkbox" name="category" value="{{ c.slug }}" {{ 'checked' if on }}>{{ c.label }}{% if prop %} ?{% endif %}
+      </label>
+    {% endfor %}
+    <button type="submit">save</button>
+    <span class="tag-saved" aria-live="polite"></span>
+  </form>
+  {% endif %}
+</div>
+
+{% for m in messages %}
+<article class="msg {{ m.sender }}">
+  <div class="who">{{ '🧑' if m.sender == 'human' else '🤖' }} {{ m.sender }}{% if m.created_at %} <span class="muted">· {{ m.created_at | fmt_ts }}</span>{% endif %}</div>
+  <div class="content">{{ m.html }}</div>
+  {% if m.files %}<div class="attach">📎 {{ m.files | join(', ') }}</div>{% endif %}
+</article>
+{% endfor %}
+{% if not messages %}<p class="muted">(no messages in this transcript)</p>{% endif %}
+{% endblock %}

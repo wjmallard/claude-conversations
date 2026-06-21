@@ -1,0 +1,64 @@
+# Filesystem archive — the source of truth. The database is a rebuildable index over it.
+conversations_dir: /path/to/exported/conversations
+
+# PostgreSQL database name (local, peer auth)
+db_name: claude_conversations
+
+# Flask
+flask_port: 5005
+
+# Embeddings (local MLX model, Apple Silicon — no API cost)
+embedding_model_id: mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ
+embedding_similarity_floor: 0.4
+
+# ---------------------------------------------------------------------------
+# Category tags (optional)
+#
+# Curation (which conversation has which tags) lives on disk in categories_file
+# as the source of truth; the conversations.categories array column is a
+# rebuildable index of it. Tags are multi-label. Define your own vocabulary
+# below; each category supports a soft date-prior window and keyword "seeds"
+# used by the classifier. (config.yaml is gitignored, so real seeds/names stay
+# out of version control.)
+categories_file: categories.json   # relative to the project root
+
+categories:
+  - slug: example-topic
+    label: Example Topic
+    description: >-
+      One-line description of what belongs in this category. Used by the semantic
+      classifier as the category prototype.
+    date_start: "2025-01-01"   # soft prior; null = unbounded
+    date_end: null
+    # local_only: true         # set on sensitive categories to skip the LLM pass
+    seeds:
+      strong: ["a distinctive phrase", "a proper noun", "another keyword"]
+      # weak:  ["ambiguous term"]   # only counts alongside a strong term
+      # topic: ["shared subject"]   # semantic anchor shared across categories
+
+# ---------------------------------------------------------------------------
+# Classifier routing (optional)
+#
+# Both sections exist so the classifier hardcodes no slugs: the taxonomy is yours
+# and lives here, in the gitignored config.
+
+# Layer 1.5 (topic): body-scan one category's `seeds` group and route each match by
+# date to whichever sibling's window contains it. Sibling categories that share a
+# subject but are separated in time (a project's terms before vs. during vs. after
+# some milestone) need this because their semantic centroids are near-identical.
+# Omit the whole block to skip the topic pass.
+#
+# topic_routing:
+#   source: example-topic       # category whose seed list is scanned
+#   seed_group: analysis        # which seeds tier on `source` to scan
+#   mid: another-topic          # match lands here if inside mid's date window
+#   early: example-topic        # ...elif inside early's window
+#   late: third-topic           # ...elif on/after late_start
+#   late_start: "2026-01-01"
+
+# Layer 2 (semantic): categories that share a topic but split by date. The group's
+# best centroid similarity is the detection; the assigned member is the one whose
+# window contains the conversation (narrowest wins).
+#
+# date_split_groups:
+#   - [example-topic, another-topic]
