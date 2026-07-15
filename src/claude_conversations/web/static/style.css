@@ -54,11 +54,26 @@ a:hover { text-decoration: underline; }
 .sorts { font-size: 13px; color: var(--muted); }
 .sorts a { margin-left: 8px; color: var(--muted); }
 .sorts a.on { color: var(--fg); font-weight: 600; }
-.convlist { list-style: none; margin: 0; padding: 0; }
-.convlist li { padding: 13px 0; border-bottom: 1px solid var(--line); }
-.convlist .title { font-size: 17px; font-weight: 600; }
-.convlist .meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
-.snip { margin-top: 6px; font-size: 14px; background: var(--code); padding: 8px 11px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+.convtable { width: 100%; border-collapse: collapse; }
+/* the narrow columns size to their content; the title column takes the rest. `baseline`
+   overrides the UA default of `middle`, so a date lines up with its title, not with the
+   midpoint of a tall row. */
+.convtable th, .convtable td { vertical-align: baseline; text-align: left; padding-right: 14px; }
+.convtable th:last-child, .convtable td:last-child { padding-right: 0; }
+.convtable th {
+  padding-bottom: 6px; border-bottom: 1px solid var(--line);
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+}
+.convtable td { padding-top: 3px; padding-bottom: 3px; border-bottom: 1px solid var(--line); line-height: 1.4; }
+/* column geometry applies to the whole column (th + td); text styling is scoped to td,
+   so it cannot outrank the header rule above and resize a heading. */
+.convtable .c-when { width: 1%; white-space: nowrap; }
+.convtable .c-count { width: 1%; text-align: right; }
+.convtable td.c-when, .convtable td.c-count { font-size: 13px; color: var(--muted); }
+.convtable td.c-count { font-variant-numeric: tabular-nums; }
+.convtable .title { font-size: 14px; }
+.convtable .score { font-size: 12px; margin-left: 7px; white-space: nowrap; }
+.snip { margin-top: 4px; font-size: 13px; line-height: 1.45; background: var(--code); padding: 6px 9px; border-radius: 5px; white-space: pre-wrap; word-break: break-word; }
 mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
 .pager { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 26px; color: var(--muted); }
 .pager .cur { font-weight: 700; color: var(--fg); }

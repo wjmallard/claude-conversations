@@ -41,20 +41,33 @@
   </div>
 </div>
 
-<ul class="convlist">
-  {% for r in results %}
-  <li>
-    <a class="title" href="{{ url_for('conversation', uuid=r.uuid) }}">{{ r.name or '(untitled)' }}</a>
-    {% if r.categories %}<span class="tags">{% for s in r.categories %}<span class="tag tag-{{ s }} {{ 'proposal' if tag_methods.get(r.uuid, {}).get(s) == 'semantic' }}">{{ category_label.get(s, s) }}</span>{% endfor %}</span>{% endif %}
-    <div class="meta">
-      {{ (r.updated_at or r.created_at) | fmt_ts }} · {{ r.n_messages }} msgs
-      {% if r.score is not none %} · <span class="muted">score {{ '%.3f' | format(r.score) }}</span>{% endif %}
-    </div>
-    {% if r.snippet %}<div class="snip">{{ r.snippet | highlight }}</div>{% endif %}
-  </li>
-  {% endfor %}
-</ul>
-{% if not results %}<p class="muted">No {{ 'matches' if q else 'conversations' }}{% if df or dt %} in that date range{% endif %}.</p>{% endif %}
+{% if results %}
+<table class="convtable">
+  <thead>
+    <tr>
+      <th class="c-when">date</th>
+      <th class="c-count">msg</th>
+      <th class="c-what">title</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in results %}
+    <tr>
+      <td class="c-when">{{ (r.updated_at or r.created_at) | fmt_ts }}</td>
+      <td class="c-count">{{ r.n_messages }}</td>
+      <td class="c-what">
+        <a class="title" href="{{ url_for('conversation', uuid=r.uuid) }}">{{ r.name or '(untitled)' }}</a>
+        {% if r.categories %}<span class="tags">{% for s in r.categories %}<span class="tag tag-{{ s }} {{ 'proposal' if tag_methods.get(r.uuid, {}).get(s) == 'semantic' }}">{{ category_label.get(s, s) }}</span>{% endfor %}</span>{% endif %}
+        {% if r.score is not none %}<span class="score muted">score {{ '%.3f' | format(r.score) }}</span>{% endif %}
+        {% if r.snippet %}<div class="snip">{{ r.snippet | highlight }}</div>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No {{ 'matches' if q else 'conversations' }}{% if df or dt %} in that date range{% endif %}.</p>
+{% endif %}
 
 {% if total_pages > 1 %}
 <nav class="pager">
