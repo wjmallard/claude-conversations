@@ -42,6 +42,27 @@ def initdb_main():
     print("Next: cc-index")
 
 
+def import_main():
+    ap = argparse.ArgumentParser(
+        description="Split a claude.ai export into the archive, then index it",
+    )
+    ap.add_argument("export", help="Path to the export .zip (or a bare conversations.json)")
+    ap.add_argument("--no-index", action="store_true", help="Split into the archive but skip indexing")
+    args = ap.parse_args()
+    _log()
+
+    from claude_conversations.importer import import_export
+    import_export(args.export)
+    if args.no_index:
+        print("Skipped indexing (--no-index); run cc-index when you're ready.")
+        return
+
+    from claude_conversations.db import check_db
+    from claude_conversations.indexer import index_archive
+    check_db()
+    index_archive()
+
+
 def index_main():
     ap = argparse.ArgumentParser(description="Index conversations into the database")
     ap.add_argument("--reindex", action="store_true", help="Re-process every conversation, ignoring the content-digest cache")

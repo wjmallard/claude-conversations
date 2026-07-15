@@ -19,9 +19,14 @@ modeled on, the `twitter-news` project (same stack and conventions).
 
 ## Data model
 
-Export = one pair per conversation in `conversations_dir`:
+A claude.ai export is a `.zip` holding one big `conversations.json` (a JSON array of
+conversations, messages inline under `chat_messages`). `cc-import` reads it straight
+out of the zip and splits it into one pair per conversation in `conversations_dir`:
 - `<uuid>.metadata.json` -> `{uuid, name, summary, created_at, updated_at, account:{uuid}}`
 - `<uuid>.jsonl` -> one message per line: `{uuid, sender, created_at, parent_message_uuid, text, content:[blocks]}`
+
+Exports are often **incremental** (a recent window, not a snapshot), so importing
+merges: a conversation an export does not mention is left alone, never deleted.
 
 Always render from `content` blocks, never the flattened top-level `text` (it
 contains "block not supported" placeholders where tools ran). Block types:
@@ -43,7 +48,8 @@ typed.
 
 ## Layout
 
-- `src/claude_conversations/`: `config.py`, `db.py` (connection + search), `parse.py`
+- `src/claude_conversations/`: `config.py`, `db.py` (connection + search), `importer.py`
+  (export .zip -> archive, via orjson + stdlib zipfile), `parse.py`
   (read/flatten export), `indexer.py`, `embedding.py` (MLX, lazy import),
   `render.py` (content blocks -> HTML), `categories.py` (tag curation store),
   `classifier.py` (layered keyword/semantic sieve), `cli.py`, `web/` (Flask app +
