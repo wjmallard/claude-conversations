@@ -664,6 +664,72 @@ def conversation_raw(conn, uuid):
     return [r["raw"] for r in rows if r["raw"] is not None]
 
 
+def conversation_leaves(conn, conv_uuid):
+    """Every leaf (a message with no children) of a conversation, newest first.
+
+    A conversation is a tree; each leaf is the endpoint of one branch. The first row is
+    the default path to render (the branch touched most recently) and the row count is
+    how many branches exist (1 == a linear thread). Ties break by export order.
+    """
+    return conn.execute(
+        """
+        SELECT
+            m.uuid,
+            m.created_at
+        FROM messages m
+        LEFT JOIN messages c ON c.parent_uuid = m.uuid
+        WHERE m.conv_uuid = %(uuid)s
+          AND c.uuid IS NULL
+        ORDER BY m.created_at DESC NULLS LAST,
+                 m.seq DESC
+        """,
+        {"uuid": conv_uuid},
+    ).fetchall()
+
+
+def conversation_path(conn, conv_uuid, leaf_uuid):
+    """The messages along one conversational path, root first, exactly as exported.
+
+    Walks parent_uuid up from leaf_uuid to the conversation head, so the detail view can
+    render a single clean branch rather than every branch interleaved in export order.
+    leaf_uuid is a message of the conversation (typically a true leaf); the path is
+    root -> that node. Returns raw JSONB in root->leaf order, or [] when leaf_uuid is not
+    a message of this conversation.
+    """
+    rows = conn.execute(
+        """
+        WITH RECURSIVE path AS (
+            SELECT
+                uuid,
+                parent_uuid,
+                raw,
+                0 AS depth
+            FROM messages
+            WHERE conv_uuid = %(uuid)s
+              AND uuid = %(leaf)s
+            UNION ALL
+            SELECT
+                m.uuid,
+                m.parent_uuid,
+                m.raw,
+                p.depth + 1
+            FROM messages m
+            JOIN path p ON m.uuid = p.parent_uuid
+            WHERE m.conv_uuid = %(uuid)s
+        )
+        SELECT raw
+        FROM path
+        WHERE raw IS NOT NULL
+        ORDER BY depth DESC
+        """,
+        {
+            "uuid": conv_uuid,
+            "leaf": leaf_uuid,
+        },
+    ).fetchall()
+    return [r["raw"] for r in rows if r["raw"] is not None]
+
+
 def conversations_by_uuids(conn, uuids):
     """Look up conversation rows for a list of uuids, keyed by uuid (review queue)."""
     if not uuids:

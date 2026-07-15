@@ -2,12 +2,17 @@
 {% block title %}{{ meta.name or 'Conversation' }}{% endblock %}
 {% block content %}
 <div class="convhead">
-  <a class="back" href="{{ url_for('index') }}">← all conversations</a>
+  <a class="back" href="{{ url_for('index') }}">&larr; all conversations</a>
   <h1>{{ meta.name or '(untitled)' }}</h1>
   <div class="meta">
-    {{ meta.created_at | fmt_ts }}{% if meta.updated_at %} → {{ meta.updated_at | fmt_ts }}{% endif %}
-    · {{ meta.n_messages }} messages
-    · <a href="{{ url_for('raw', uuid=uuid) }}" target="_blank" rel="noopener">raw</a>
+    {{ meta.created_at | fmt_ts }}{% if meta.updated_at %} &rarr; {{ meta.updated_at | fmt_ts }}{% endif %}
+    {% if n_leaves and n_leaves > 1 %}
+    &middot; {{ messages | length }} of {{ meta.n_messages }} messages
+    &middot; <span class="muted">newest of {{ n_leaves }} branches</span>
+    {% else %}
+    &middot; {{ meta.n_messages }} messages
+    {% endif %}
+    &middot; <a href="{{ url_for('raw', uuid=uuid) }}" target="_blank" rel="noopener">raw</a>
   </div>
   {% if meta.summary %}
   <details class="blk convsummary">

@@ -13,6 +13,8 @@ from claude_conversations.db import (
     HL_STOP,
     category_facets,
     check_db,
+    conversation_leaves,
+    conversation_path,
     conversation_raw,
     conversations_by_uuids,
     count_conversations,
@@ -253,13 +255,30 @@ def index():
 def conversation(uuid):
     if not _UUID_RE.match(uuid):
         abort(404)
+    # A conversation is a tree; ?leaf=<msg-uuid> selects which branch to render. An
+    # absent, malformed, or unknown leaf falls back to the newest branch. Abandoned
+    # branches are never dropped -- they stay in the DB, searchable; this only chooses
+    # what the detail view shows.
+    leaf = request.args.get("leaf") or None
+    if leaf and not _UUID_RE.match(leaf):
+        leaf = None
     with get_conn() as conn:
         meta = get_conversation(conn, uuid)
         if not meta:
             abort(404)
-        raws = conversation_raw(conn, uuid)
+        leaves = conversation_leaves(conn, uuid)
+        if leaf not in {row["uuid"] for row in leaves}:
+            leaf = leaves[0]["uuid"] if leaves else None
+        raws = conversation_path(conn, uuid, leaf) if leaf else conversation_raw(conn, uuid)
     messages = [render.render_message(m) for m in raws]
-    return render_template("detail.html", meta=meta, messages=messages, uuid=uuid)
+    return render_template(
+        "detail.html",
+        meta=meta,
+        messages=messages,
+        uuid=uuid,
+        leaf=leaf,
+        n_leaves=len(leaves),
+    )
 
 
 @app.route("/c/<uuid>/tags", methods=["POST"])
