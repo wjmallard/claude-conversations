@@ -43,7 +43,9 @@ Then select **semantic** mode in the search bar.
 
 | Command | What it does |
 | --- | --- |
-| `cc-initdb [--reset]` | Create the database and apply `sql/schema.sql` (`--reset` drops the index, keeping the cached embeddings) |
+| `cc-initdb` | Create the database and apply `sql/schema.sql`; idempotent, safe to re-run |
+| `cc-initdb --reset` | Wipe the index and rebuild it empty, **keeping the cached embeddings** -- a full re-import then costs no re-embedding |
+| `cc-initdb --reset-hard` | Drop the database outright, cache included; the next `cc-embed` recomputes every vector |
 | `cc-import FILE [--reimport]` | Import a claude.ai export `.zip` into the database (merges; never deletes) |
 | `cc-embed` | Embed any prose with no vector yet (resumable) |
 | `cc-status` | Show counts (conversations / messages / embedded) |

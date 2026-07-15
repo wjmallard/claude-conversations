@@ -25,6 +25,23 @@ def _ensure_database() -> bool:
         return True
 
 
+def _drop_database() -> bool:
+    """DROP the target database outright. Returns True if there was one to drop.
+
+    Runs from the maintenance database, since a session cannot drop the database it is
+    connected to, and WITH (FORCE) terminates any other session -- a cc-web left running
+    would otherwise hold the drop off indefinitely.
+    """
+    with psycopg.connect(dbname="postgres", autocommit=True) as con:
+        existed = con.execute(
+            "SELECT 1 FROM pg_database WHERE datname = %(name)s",
+            {"name": config.DB_NAME},
+        ).fetchone() is not None
+        if existed:
+            con.execute(f'DROP DATABASE "{config.DB_NAME}" WITH (FORCE)')
+    return existed
+
+
 def _prefer_lz4() -> bool:
     """Ask the database for lz4 TOAST compression, keeping pglz if it isn't available.
 
@@ -45,9 +62,19 @@ def _prefer_lz4() -> bool:
 
 def initdb_main():
     ap = argparse.ArgumentParser(description="Create the database and apply the schema")
-    ap.add_argument("--reset", action="store_true", help="Drop the whole index first, keeping only the cached embeddings")
+    # The two differ in exactly one way: whether the embedding cache survives. Everything
+    # else is cheap to rebuild from an export, so that is the only choice worth offering.
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--reset", action="store_true",
+                      help="Drop the whole index first, keeping the cached embeddings")
+    mode.add_argument("--reset-hard", action="store_true",
+                      help="Drop the DATABASE first, cache included -- the next cc-embed recomputes every vector")
     args = ap.parse_args()
     _log()
+
+    if args.reset_hard:
+        if _drop_database():
+            print(f"Dropped database {config.DB_NAME!r}, embedding cache included.")
 
     created = _ensure_database()
     from claude_conversations.db import apply_schema, get_conn
