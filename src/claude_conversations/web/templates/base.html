@@ -85,13 +85,53 @@
     document.querySelectorAll('.fields input[name=field]').forEach(function (cb) {
       cb.addEventListener('change', function () { cb.closest('.fchip').classList.toggle('on', cb.checked); });
     });
-    // tag editor: toggle highlight + auto-save instantly (matches the review page)
+    // tag editor: hidden behind the "edit" button; toggles highlight + saves instantly
     var tagEdit = document.querySelector('.tag-edit');
     if (tagEdit) {
       var tagSaved = tagEdit.querySelector('.tag-saved');
+      var tagNames = document.getElementById('tagnames');
+      var tagToggle = document.querySelector('.tagline-edit');
+      if (tagToggle) {
+        tagToggle.addEventListener('click', function () {
+          var opening = tagEdit.hasAttribute('hidden');
+          tagEdit.toggleAttribute('hidden', !opening);
+          tagToggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
+          tagToggle.textContent = opening ? 'done' : 'edit';
+        });
+      }
+      // Repaint the summary line from the checkboxes, so it stays true after a save
+      // without a reload. Built as nodes, not markup, so a label is never parsed as HTML.
+      function paintTagNames() {
+        if (!tagNames) return;
+        var labels = [];
+        tagEdit.querySelectorAll('input[type=checkbox]:checked').forEach(function (cb) {
+          labels.push(cb.dataset.label || cb.value);
+        });
+        tagNames.textContent = '';
+        if (!labels.length) {
+          var none = document.createElement('span');
+          none.className = 'tagline-none';
+          none.textContent = 'untagged';
+          tagNames.appendChild(none);
+          return;
+        }
+        labels.forEach(function (name, i) {
+          if (i) {
+            var sep = document.createElement('span');
+            sep.className = 'tagline-sep';
+            sep.textContent = ' \u00b7 ';  // ASCII source; renders as the template's " &middot; "
+            tagNames.appendChild(sep);
+          }
+          var el = document.createElement('span');
+          el.className = 'tagline-name';
+          el.textContent = name;
+          tagNames.appendChild(el);
+        });
+      }
       tagEdit.querySelectorAll('input[type=checkbox]').forEach(function (el) {
         el.addEventListener('change', function () {
           el.closest('.tag-opt').classList.toggle('on', el.checked);
+          paintTagNames();
           var body = new URLSearchParams();
           tagEdit.querySelectorAll('input[type=checkbox]:checked').forEach(function (cb) { body.append('category', cb.value); });
           body.append('ajax', '1');

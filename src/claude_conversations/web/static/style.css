@@ -124,12 +124,24 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
    none, and every slug falls back to the generic .tag above. */
 
 /* tag editor on the detail page */
-.tag-edit { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding-top: 12px; border-top: 1px solid var(--line); }
-.tag-edit-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+/* applied tags, as plain dot-separated text; the editor hides behind the button */
+.tagline { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+           display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.tagline-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tagline-names { font-size: 13px; }
+.tagline-name { color: var(--fg); }
+.tagline-sep { color: var(--muted); margin: 0 5px; }
+.tagline-none { color: var(--muted); font-style: italic; }
+.tagline-edit { font-size: 12px; color: var(--muted); background: none; border: 0; cursor: pointer;
+                padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+.tagline-edit:hover { color: var(--fg); }
+
+.tag-edit { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+/* `display: flex` above beats the `hidden` attribute, so say it explicitly */
+.tag-edit[hidden] { display: none; }
 .tag-opt { font-size: 13px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; color: var(--muted); user-select: none; }
 .tag-opt.on, .tag-opt:has(input:checked) { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--fg); border-color: var(--accent); }
 .tag-opt input { display: none; }
-.tag-edit button { padding: 5px 15px; font-size: 13px; color: #fff; background: var(--accent); border: 1px solid var(--accent); border-radius: 8px; cursor: pointer; }
 .tag-saved { font-size: 12px; color: var(--asst); opacity: 0; transition: opacity .2s; }
 .tag-saved.show { opacity: 1; }
 

@@ -17,16 +17,31 @@
   {% endif %}
 
   {% if categories_vocab %}
-  <form class="tag-edit" id="tags" method="post" action="{{ url_for('set_tags', uuid=uuid) }}">
-    <span class="tag-edit-label">tags</span>
+  {# Only the tags that apply, in the vocabulary's own order so the JS repaint after a
+     save produces the same sequence this does. #}
+  <div class="tagline">
+    <span class="tagline-label">tags</span>
+    <span class="tagline-names" id="tagnames">
+      {%- for c in categories_vocab if c.slug in (meta.categories or []) -%}
+        {%- if not loop.first %} <span class="tagline-sep">&middot;</span> {% endif -%}
+        <span class="tagline-name">{{ c.label }}</span>
+      {%- else -%}
+        <span class="tagline-none">untagged</span>
+      {%- endfor -%}
+    </span>
+    <button type="button" class="tagline-edit" aria-expanded="false" aria-controls="tags">edit</button>
+  </div>
+
+  {# The full vocabulary, revealed by that button. Each change saves on its own, so
+     there is no submit: the form element only carries the action for the fetch. #}
+  <form class="tag-edit" id="tags" hidden method="post" action="{{ url_for('set_tags', uuid=uuid) }}">
     {% for c in categories_vocab %}
       {% set on = c.slug in (meta.categories or []) %}
       {% set prop = tag_methods.get(uuid, {}).get(c.slug) == 'semantic' %}
       <label class="tag-opt tag-{{ c.slug }} {{ 'on' if on }} {{ 'proposal' if prop }}">
-        <input type="checkbox" name="category" value="{{ c.slug }}" {{ 'checked' if on }}>{{ c.label }}{% if prop %} ?{% endif %}
+        <input type="checkbox" name="category" value="{{ c.slug }}" data-label="{{ c.label }}" {{ 'checked' if on }}>{{ c.label }}{% if prop %} ?{% endif %}
       </label>
     {% endfor %}
-    <button type="submit">save</button>
     <span class="tag-saved" aria-live="polite"></span>
   </form>
   {% endif %}
