@@ -68,7 +68,12 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .convhead .back { font-size: 13px; }
 .convhead h1 { margin: 8px 0 4px; font-size: 24px; line-height: 1.25; }
 .convhead .meta { font-size: 13px; color: var(--muted); }
-.convhead .summary { margin-top: 8px; font-style: italic; color: var(--muted); }
+/* the export's own summary; a collapsed .blk disclosure, closed until asked for */
+.convhead .convsummary { margin-top: 10px; }
+.convhead .convsummary > summary { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.convhead .convsummary .blk-body { font-size: 14px; color: var(--muted); }
+.convhead .convsummary .blk-body > :first-child { margin-top: 0; }
+.convhead .convsummary .blk-body > :last-child { margin-bottom: 0; }
 
 .msg { margin: 16px 0; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
 .msg.human { border-left: 3px solid var(--human); }

@@ -85,6 +85,12 @@ def _get_query_vec(text):
     return vec_literal(embed_texts([text])[0])
 
 
+@app.template_filter("summary_md")
+def _summary_md(v):
+    """The export writes summaries in Markdown, so render them as such."""
+    return render.render_summary(v)
+
+
 @app.template_filter("fmt_ts")
 def _fmt_ts(v):
     if not v:

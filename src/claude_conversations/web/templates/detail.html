@@ -9,7 +9,12 @@
     · {{ meta.n_messages }} messages
     · <a href="{{ url_for('raw', uuid=uuid) }}" target="_blank" rel="noopener">raw</a>
   </div>
-  {% if meta.summary %}<p class="summary">{{ meta.summary }}</p>{% endif %}
+  {% if meta.summary %}
+  <details class="blk convsummary">
+    <summary>Conversation overview</summary>
+    <div class="blk-body">{{ meta.summary | summary_md }}</div>
+  </details>
+  {% endif %}
 
   {% if categories_vocab %}
   <form class="tag-edit" id="tags" method="post" action="{{ url_for('set_tags', uuid=uuid) }}">

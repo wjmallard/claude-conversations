@@ -1,8 +1,8 @@
 """Render a message's content blocks to HTML for the detail view.
 
-Works from the raw `content` array (read from disk), not the flattened `text`
-field. Assistant/human prose is rendered as Markdown; thinking, tool calls, and
-tool results become collapsible sections. Images are not rendered (by design).
+Works from the raw `content` array (messages.raw), not the flattened `text` field.
+Assistant/human prose is rendered as Markdown; thinking, tool calls, and tool
+results become collapsible sections. Images are not rendered (by design).
 
 Safety: prose from you/Claude is rendered as Markdown (trusted, local, single
 user). Untrusted web content inside tool results is HTML-escaped and shown as
@@ -10,15 +10,26 @@ plain text -- never rendered as Markdown/HTML.
 """
 
 import json
+import re
 
 import markdown as _markdown
 from markupsafe import Markup, escape
 
 _MD_EXT = ["fenced_code", "tables", "sane_lists", "nl2br"]
 
+# Every summary the export writes opens with its own bold "**Conversation overview**"
+# line, which only repeats the label of the panel it sits in.
+_SUMMARY_HEADER_RE = re.compile(r"\A\s*\*\*conversation overview\*\*\s*\n+", re.IGNORECASE)
+
 
 def _md(text) -> Markup:
     return Markup(_markdown.markdown(text or "", extensions=_MD_EXT, output_format="html5"))
+
+
+def render_summary(text) -> Markup:
+    """Render a conversation's summary (Markdown, like everything else the export
+    writes), minus the redundant header it opens with."""
+    return _md(_SUMMARY_HEADER_RE.sub("", text or "", count=1))
 
 
 def _details(cls, summary_html, body_html) -> Markup:
