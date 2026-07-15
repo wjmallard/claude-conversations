@@ -278,6 +278,12 @@ def chunk_text(text, max_chars=EMBED_CHUNK_CHARS) -> list[str]:
     return [c for c in (c.strip() for c in chunks) if c]
 
 
+def text_sha256(text) -> str:
+    """Hex SHA-256 of a chunk's text. An embedding is a pure function of its text, so
+    this is what a vector is keyed by -- see the embeddings table."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def file_sha256(path) -> str:
     """Return the hex SHA-256 of a file's bytes for incremental-reindex comparison,
     or '' if it does not exist.

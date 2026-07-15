@@ -81,11 +81,13 @@ CREATE INDEX IF NOT EXISTS idx_msg_parent    ON messages(parent_uuid);
 CREATE INDEX IF NOT EXISTS idx_msg_text_tsv  ON messages USING GIN (text_tsv);
 CREATE INDEX IF NOT EXISTS idx_msg_text_trgm ON messages USING GIN (text gin_trgm_ops);
 
--- One embedding per chunk of a message's PROSE. Long pasted documents are split
--- into <=24k-char chunks so semantic search covers them in full (the MLX embedder
--- truncates at ~8k tokens); a short message produces exactly one chunk. conv_uuid,
--- sender, and created_at are denormalized from the parent message so semantic search
--- and the category centroids apply the same filters as keyword search.
+-- One row per chunk of a message's PROSE. Long pasted documents are split into
+-- <=24k-char chunks so semantic search covers them in full (the MLX embedder truncates
+-- at ~8k tokens, and the archive holds messages many times that); a short message
+-- produces exactly one chunk, and prose too short to carry retrievable meaning
+-- (embedding_min_chars) produces none. conv_uuid, sender, and created_at are
+-- denormalized from the parent message so semantic search and the category centroids
+-- apply the same filters as keyword search.
 CREATE TABLE IF NOT EXISTS message_chunks (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     msg_uuid    TEXT NOT NULL REFERENCES messages(uuid) ON DELETE CASCADE,
@@ -94,9 +96,34 @@ CREATE TABLE IF NOT EXISTS message_chunks (
     sender      TEXT,                        -- copied from the parent message
     created_at  TIMESTAMPTZ,                 -- copied from the parent message
     text        TEXT NOT NULL,               -- a <=24k-char slice of messages.text (prose)
-    embedding   vector(1024)                 -- MLX Qwen3-Embedding-0.6B; NULL until `cc-embed`
+    text_sha256 TEXT NOT NULL                -- joins to embeddings; see below
 );
 
-CREATE INDEX IF NOT EXISTS idx_chunk_conv      ON message_chunks(conv_uuid);
-CREATE INDEX IF NOT EXISTS idx_chunk_msg       ON message_chunks(msg_uuid);
-CREATE INDEX IF NOT EXISTS idx_chunk_embedding ON message_chunks USING hnsw (embedding vector_cosine_ops);
+-- Idempotent migration for pre-existing databases: embeddings moved out of
+-- message_chunks and are now keyed by content, so a rebuild no longer discards them.
+-- Must precede the indexes below, which reference the new column.
+ALTER TABLE message_chunks ADD COLUMN IF NOT EXISTS text_sha256 TEXT;
+ALTER TABLE message_chunks DROP COLUMN IF EXISTS embedding;
+DROP INDEX IF EXISTS idx_chunk_embedding;
+
+CREATE INDEX IF NOT EXISTS idx_chunk_conv ON message_chunks(conv_uuid);
+CREATE INDEX IF NOT EXISTS idx_chunk_msg  ON message_chunks(msg_uuid);
+CREATE INDEX IF NOT EXISTS idx_chunk_sha  ON message_chunks(text_sha256);
+
+-- The vector for one piece of prose, keyed by the prose itself.
+--
+-- An embedding is a pure function of its text, so it is cached by content rather than
+-- owned by a chunk row. Re-indexing a conversation deletes and recreates its chunks (a
+-- cascade from messages), which would otherwise throw away every vector and force a
+-- re-embed -- even when an export merely re-serialized a transcript and not a word of
+-- the prose changed. Nothing cascades into this table, so the vectors outlive rebuilds
+-- and cc-embed only computes text it has never seen.
+--
+-- No HNSW index here, deliberately. Semantic search is a THRESHOLD query (every chunk
+-- above a similarity floor, aggregated per conversation), and pgvector can only serve
+-- HNSW for `ORDER BY embedding <=> q LIMIT k`. The old index cost 427 MB and the
+-- planner never used it. Add one only alongside a query that can.
+CREATE TABLE IF NOT EXISTS embeddings (
+    text_sha256 TEXT PRIMARY KEY,           -- sha256 of message_chunks.text
+    embedding   vector(1024) NOT NULL       -- MLX Qwen3-Embedding-0.6B
+);

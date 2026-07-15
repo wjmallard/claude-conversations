@@ -403,9 +403,10 @@ def search_semantic(
             SELECT
                 m.conv_uuid,
                 m.text,
-                1 - (m.embedding <=> %(vec)s::vector) AS s
+                1 - (e.embedding <=> %(vec)s::vector) AS s
             FROM message_chunks m
-            WHERE m.embedding IS NOT NULL{sender}{dclause}
+            JOIN embeddings e ON e.text_sha256 = m.text_sha256
+            WHERE TRUE{sender}{dclause}
         ),
         best AS (
             SELECT
@@ -449,9 +450,10 @@ def count_semantic(conn, query_vec, min_score=0.4, date_from=None, date_to=None,
         WITH scores AS (
             SELECT
                 m.conv_uuid,
-                max(1 - (m.embedding <=> %(vec)s::vector)) AS s
+                max(1 - (e.embedding <=> %(vec)s::vector)) AS s
             FROM message_chunks m
-            WHERE m.embedding IS NOT NULL{sender}{dclause}
+            JOIN embeddings e ON e.text_sha256 = m.text_sha256
+            WHERE TRUE{sender}{dclause}
             GROUP BY m.conv_uuid
         )
         SELECT count(*)
@@ -490,9 +492,9 @@ def semantic_centroid_scores(conn, seeds, exclude):
         conv_centroids AS (
             SELECT
                 m.conv_uuid AS uuid,
-                avg(m.embedding) AS centroid
+                avg(e.embedding) AS centroid
             FROM message_chunks m
-            WHERE m.embedding IS NOT NULL
+            JOIN embeddings e ON e.text_sha256 = m.text_sha256
             GROUP BY m.conv_uuid
         ),
         cat_centroids AS (
@@ -546,10 +548,10 @@ def centroid_scores_for(conn, seeds, target_uuids):
         conv_centroids AS (
             SELECT
                 m.conv_uuid AS uuid,
-                avg(m.embedding) AS centroid
+                avg(e.embedding) AS centroid
             FROM message_chunks m
-            WHERE m.embedding IS NOT NULL
-              AND m.conv_uuid = ANY(%(relevant)s::text[])
+            JOIN embeddings e ON e.text_sha256 = m.text_sha256
+            WHERE m.conv_uuid = ANY(%(relevant)s::text[])
             GROUP BY m.conv_uuid
         ),
         cat_centroids AS (
@@ -701,6 +703,9 @@ def stats(conn):
             (SELECT count(*) FROM conversations) AS conversations,
             (SELECT count(*) FROM messages) AS messages,
             (SELECT count(*) FROM message_chunks) AS chunks,
-            (SELECT count(*) FROM message_chunks WHERE embedding IS NOT NULL) AS embedded
+            (SELECT count(*)
+               FROM message_chunks c
+               JOIN embeddings e ON e.text_sha256 = c.text_sha256) AS embedded,
+            (SELECT count(*) FROM embeddings) AS vectors
         """
     ).fetchone()

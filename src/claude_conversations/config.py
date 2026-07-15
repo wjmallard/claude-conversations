@@ -41,6 +41,10 @@ FLASK_PORT = _raw.get("flask_port", 5005)
 EMBEDDING_MODEL_ID = _raw.get("embedding_model_id", "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ")
 EMBEDDING_SIMILARITY_FLOOR = _raw.get("embedding_similarity_floor", 0.4)
 EMBEDDING_DIM = 1024
+# Prose shorter than this is not embedded at all: a bare "." (a hard-fork marker) or
+# "yes" carries nothing retrievable, and embedding it only adds noise to search and to
+# the category centroids. Keyword and fuzzy search still find it.
+EMBEDDING_MIN_CHARS = _raw.get("embedding_min_chars", 12)
 
 # Semantic classifier (layer 2): a conversation is proposed for a category when its
 # centroid's cosine similarity to the category centroid clears this threshold; a

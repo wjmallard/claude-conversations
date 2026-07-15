@@ -72,19 +72,30 @@ def _adaptive_batch_size(text_len: int) -> int:
 
 
 def backfill_embeddings() -> int:
-    """Embed every prose chunk with text but no embedding yet. Returns count embedded."""
+    """Embed every distinct chunk text that has no vector yet. Returns count embedded.
+
+    Vectors are keyed by the sha256 of their text, not by a chunk row, so re-indexing a
+    conversation -- which deletes and recreates its chunks -- costs nothing here: the
+    text is unchanged, its hash is unchanged, and the vector is already cached. Only
+    genuinely new prose is computed.
+    """
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT id, text FROM message_chunks
-            WHERE embedding IS NULL AND text <> ''
-            ORDER BY length(text)
+            SELECT DISTINCT
+                c.text_sha256,
+                c.text
+            FROM message_chunks c
+            LEFT JOIN embeddings e ON e.text_sha256 = c.text_sha256
+            WHERE e.text_sha256 IS NULL
+              AND c.text <> ''
+            ORDER BY length(c.text)
         """).fetchall()
         if not rows:
-            print("Nothing to embed -- all chunks already have embeddings.", file=sys.stderr)
+            print("Nothing to embed -- every chunk's text already has a vector.", file=sys.stderr)
             return 0
 
         load_model()
-        items = [(r["id"], r["text"]) for r in rows]
+        items = [(r["text_sha256"], r["text"]) for r in rows]
 
         progress = tqdm(total=len(items), desc="Embedding chunks", file=sys.stderr)
         i = 0
@@ -92,14 +103,27 @@ def backfill_embeddings() -> int:
             while i < len(items):
                 batch_size = _adaptive_batch_size(len(items[i][1]))
                 batch = items[i:i + batch_size]
-                ids = [p[0] for p in batch]
+                digests = [p[0] for p in batch]
                 texts = [p[1] for p in batch]
 
                 embeddings = embed_texts(texts)
-                for row_id, emb in zip(ids, embeddings):
+                for digest, emb in zip(digests, embeddings):
                     conn.execute(
-                        "UPDATE message_chunks SET embedding = %(vec)s::vector WHERE id = %(id)s",
-                        {"vec": vec_literal(emb), "id": row_id},
+                        """
+                        INSERT INTO embeddings (
+                            text_sha256,
+                            embedding
+                        )
+                        VALUES (
+                            %(text_sha256)s,
+                            %(vec)s::vector
+                        )
+                        ON CONFLICT (text_sha256) DO NOTHING
+                        """,
+                        {
+                            "text_sha256": digest,
+                            "vec": vec_literal(emb),
+                        },
                     )
                 conn.commit()
                 progress.update(len(batch))

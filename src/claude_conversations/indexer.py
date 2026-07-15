@@ -115,7 +115,8 @@ _INSERT_CHUNK = """
         seq,
         sender,
         created_at,
-        text
+        text,
+        text_sha256
     )
     VALUES (
         %(msg_uuid)s,
@@ -123,7 +124,8 @@ _INSERT_CHUNK = """
         %(seq)s,
         %(sender)s,
         %(created_at)s,
-        %(text)s
+        %(text)s,
+        %(text_sha256)s
     )
 """
 
@@ -201,16 +203,20 @@ def index_archive(reindex=False, verbose=True):
                     "raw": Jsonb(msg),
                 })
                 # Only prose is embedded. A short message yields one chunk; a long
-                # pasted document yields several (so semantic search covers it all).
-                for cseq, chunk in enumerate(parse.chunk_text(prose)):
-                    chunk_rows.append({
-                        "msg_uuid": muuid,
-                        "conv_uuid": uuid,
-                        "seq": cseq,
-                        "sender": sender,
-                        "created_at": created,
-                        "text": chunk,
-                    })
+                # pasted document yields several (so semantic search covers it all);
+                # prose too short to mean anything yields none, so no vector is ever
+                # computed for it and it stays out of the category centroids.
+                if len(prose.strip()) >= config.EMBEDDING_MIN_CHARS:
+                    for cseq, chunk in enumerate(parse.chunk_text(prose)):
+                        chunk_rows.append({
+                            "msg_uuid": muuid,
+                            "conv_uuid": uuid,
+                            "seq": cseq,
+                            "sender": sender,
+                            "created_at": created,
+                            "text": chunk,
+                            "text_sha256": parse.text_sha256(chunk),
+                        })
             if rows:
                 conn.cursor().executemany(_INSERT_MSG, rows)
                 msg_total += len(rows)

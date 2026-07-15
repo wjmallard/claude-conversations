@@ -105,6 +105,7 @@ def status_main():
     print(f"messages indexed  : {s['messages']}")
     print(f"embedding chunks  : {s['chunks']}")
     print(f"  with embeddings : {s['embedded']}")
+    print(f"cached vectors    : {s['vectors']}")
 
 
 def web_main():
