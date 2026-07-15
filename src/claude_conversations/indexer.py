@@ -1,9 +1,20 @@
 """Scan the conversations directory and (re)build the database index.
 
-Incremental: a conversation is re-processed only when its .jsonl mtime or size
-changed since last index (or with reindex=True). Conversations whose files have
-disappeared are removed. Raw content is never stored — only the typed metadata
-and the provenance-split per-message text (prose + tool_text) that drives search.
+Incremental, and split by cost. The .metadata.json sidecar is tiny, so its fields are
+refreshed on every run — a renamed or re-summarized conversation lands without touching
+the transcript. The expensive half (re-parsing the .jsonl, rebuilding its messages and
+embedding chunks) runs only when that file's CONTENT digest changed, or with
+reindex=True.
+
+The digest is content-based on purpose: a fresh export rewrites every file with a new
+timestamp, so mtime+size bookkeeping would report the entire archive as changed and
+drop every embedding through the message_chunks cascade. Both writes for a conversation
+share one transaction, so a crash never records a digest for messages that were not
+written.
+
+Conversations whose files have disappeared are removed. Raw content is never stored —
+only the typed metadata and the provenance-split per-message text (prose + tool_text)
+that drives search.
 """
 
 import sys
@@ -24,7 +35,7 @@ def _parse_ts(s):
         return None
 
 
-_UPSERT_CONV = """
+_UPSERT_CONV_META = """
     INSERT INTO conversations (
         uuid,
         name,
@@ -32,10 +43,7 @@ _UPSERT_CONV = """
         created_at,
         updated_at,
         account_uuid,
-        n_messages,
         source_path,
-        source_mtime,
-        source_size,
         indexed_at
     )
     VALUES (
@@ -45,10 +53,7 @@ _UPSERT_CONV = """
         %(created_at)s,
         %(updated_at)s,
         %(account_uuid)s,
-        %(n_messages)s,
         %(source_path)s,
-        %(source_mtime)s,
-        %(source_size)s,
         now()
     )
     ON CONFLICT (uuid) DO UPDATE SET
@@ -57,11 +62,19 @@ _UPSERT_CONV = """
         created_at = excluded.created_at,
         updated_at = excluded.updated_at,
         account_uuid = excluded.account_uuid,
-        n_messages = excluded.n_messages,
         source_path = excluded.source_path,
-        source_mtime = excluded.source_mtime,
-        source_size = excluded.source_size,
         indexed_at = now()
+"""
+
+# Written only once a transcript's messages have been rebuilt, in the same transaction,
+# so an interrupted run never leaves a digest recorded for messages that never landed.
+# n_messages counts the whole file, including messages carrying no indexable text.
+_UPDATE_CONV_SOURCE = """
+    UPDATE conversations
+    SET
+        n_messages = %(n_messages)s,
+        source_sha256 = %(source_sha256)s
+    WHERE uuid = %(uuid)s
 """
 
 _INSERT_MSG = """
@@ -117,29 +130,22 @@ def index_archive(reindex=False, verbose=True):
 
     with get_conn() as conn:
         existing = {
-            r["uuid"]: (r["source_mtime"], r["source_size"])
+            r["uuid"]: r["source_sha256"]
             for r in conn.execute(
-                "SELECT uuid, source_mtime, source_size FROM conversations"
+                "SELECT uuid, source_sha256 FROM conversations"
             ).fetchall()
         }
 
         progress = tqdm(files, desc="Indexing", file=sys.stderr, disable=not verbose)
         for i, (uuid, jsonl_path, meta_path) in enumerate(progress):
             on_disk.append(uuid)
-            mtime, size = parse.file_stat(jsonl_path)
+            digest = parse.file_sha256(jsonl_path)
 
-            if not reindex and uuid in existing:
-                old_mtime, old_size = existing[uuid]
-                if old_mtime is not None and abs((old_mtime or 0) - mtime) < 1e-6 and old_size == size:
-                    skipped += 1
-                    continue
-
+            # The sidecar is cheap to read, so refresh it unconditionally: a rename or
+            # an updated summary lands even when the transcript itself is untouched.
             meta = parse.load_metadata(meta_path)
-            messages = parse.load_messages(jsonl_path)
-            upload_views = parse.view_upload_names(messages)
-
             conn.execute(
-                _UPSERT_CONV,
+                _UPSERT_CONV_META,
                 {
                     "uuid": uuid,
                     "name": meta.get("name") or None,
@@ -147,12 +153,18 @@ def index_archive(reindex=False, verbose=True):
                     "created_at": _parse_ts(meta.get("created_at")),
                     "updated_at": _parse_ts(meta.get("updated_at")),
                     "account_uuid": (meta.get("account") or {}).get("uuid"),
-                    "n_messages": len(messages),
                     "source_path": str(jsonl_path),
-                    "source_mtime": mtime,
-                    "source_size": size,
                 },
             )
+
+            # Everything below re-parses the transcript and re-embeds it; do it only
+            # when the bytes actually moved.
+            if not reindex and uuid in existing and existing[uuid] == digest:
+                skipped += 1
+                continue
+
+            messages = parse.load_messages(jsonl_path)
+            upload_views = parse.view_upload_names(messages)
 
             # Replace this conversation's searchable messages.
             conn.execute(
@@ -192,6 +204,15 @@ def index_archive(reindex=False, verbose=True):
                 msg_total += len(rows)
             if chunk_rows:
                 conn.cursor().executemany(_INSERT_CHUNK, chunk_rows)
+
+            conn.execute(
+                _UPDATE_CONV_SOURCE,
+                {
+                    "n_messages": len(messages),
+                    "source_sha256": digest,
+                    "uuid": uuid,
+                },
+            )
 
             changed += 1
             if (i + 1) % 200 == 0:

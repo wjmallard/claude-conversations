@@ -18,6 +18,7 @@ Pasted/uploaded documents are NOT content blocks — they live in the message-le
 message_texts() for how attachment text is folded into the searchable streams.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -248,10 +249,18 @@ def chunk_text(text, max_chars=EMBED_CHUNK_CHARS) -> list[str]:
     return [c for c in (c.strip() for c in chunks) if c]
 
 
-def file_stat(path) -> tuple[float, int]:
-    """Return (mtime, size) for incremental-reindex comparison, or (0, 0)."""
+def file_sha256(path) -> str:
+    """Return the hex SHA-256 of a file's bytes for incremental-reindex comparison,
+    or '' if it does not exist.
+
+    Content, not mtime: a fresh export rewrites every file with a new timestamp, so
+    mtime+size bookkeeping reports the whole archive as changed and forces a full
+    rebuild — which drops every embedding through the message_chunks cascade. Only a
+    genuinely changed transcript changes its digest, and digesting the entire archive
+    costs a couple of seconds.
+    """
     try:
-        st = os.stat(path)
-        return st.st_mtime, st.st_size
+        with open(path, "rb") as f:
+            return hashlib.file_digest(f, "sha256").hexdigest()
     except FileNotFoundError:
-        return 0.0, 0
+        return ""

@@ -36,9 +36,11 @@ Then select **semantic** mode in the search bar.
 | Command | What it does |
 | --- | --- |
 | `cc-initdb [--reset]` | Create the database and apply `sql/schema.sql` (`--reset` drops tables first) |
-| `cc-index [--reindex]` | Index conversations; incremental by file mtime/size (`--reindex` forces all) |
+| `cc-index [--reindex]` | Index conversations; incremental by transcript content digest (`--reindex` forces all) |
 | `cc-embed` | Embed messages with no embedding yet (resumable) |
 | `cc-status` | Show counts (conversations / messages / embedded) |
 | `cc-web` | Run the Flask UI |
 
 Re-run `cc-index` (and `cc-embed`) after adding new exports — both are incremental.
+Re-exporting the whole archive is cheap: only conversations whose transcript content
+actually changed are re-parsed and re-embedded.

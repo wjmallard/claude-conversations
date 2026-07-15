@@ -44,7 +44,7 @@ def initdb_main():
 
 def index_main():
     ap = argparse.ArgumentParser(description="Index conversations into the database")
-    ap.add_argument("--reindex", action="store_true", help="Re-process every conversation, ignoring mtime/size cache")
+    ap.add_argument("--reindex", action="store_true", help="Re-process every conversation, ignoring the content-digest cache")
     args = ap.parse_args()
     _log()
 

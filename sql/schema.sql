@@ -17,10 +17,12 @@ CREATE TABLE IF NOT EXISTS conversations (
     updated_at    TIMESTAMPTZ,
     account_uuid  TEXT,
     n_messages    INTEGER NOT NULL DEFAULT 0,
-    -- incremental-reindex bookkeeping (skip files whose mtime+size are unchanged)
+    -- incremental-reindex bookkeeping: skip transcripts whose CONTENT is unchanged.
+    -- Content, not mtime: a fresh export rewrites every file with a new timestamp,
+    -- so mtime+size would rebuild the whole archive and drop every embedding via
+    -- the message_chunks cascade.
     source_path   TEXT,
-    source_mtime  DOUBLE PRECISION,
-    source_size   BIGINT,
+    source_sha256 TEXT,
     indexed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- multi-label category tags; rebuildable mirror of categories.json
     categories    TEXT[] NOT NULL DEFAULT '{}'
@@ -33,6 +35,13 @@ CREATE INDEX IF NOT EXISTS idx_conv_name_trgm ON conversations USING GIN (name g
 -- Idempotent migration for pre-existing databases, plus the tag-filter index.
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS categories TEXT[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_conv_categories ON conversations USING GIN (categories);
+
+-- mtime+size bookkeeping replaced by the content digest (see source_sha256 above).
+-- Digest-first: back-fill source_sha256 BEFORE applying this, or the first cc-index
+-- rebuilds every conversation and re-embeds the whole archive.
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS source_sha256 TEXT;
+ALTER TABLE conversations DROP COLUMN IF EXISTS source_mtime;
+ALTER TABLE conversations DROP COLUMN IF EXISTS source_size;
 
 -- One row per searchable message (messages with no extractable text are skipped).
 -- Search operates on messages, then aggregates the best score per conversation.

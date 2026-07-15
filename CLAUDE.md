@@ -57,7 +57,14 @@ typed.
 - psycopg uses `%`-style params, so the pg_trgm `<<%` operator is written `<<%%`.
 - Snippets highlight via sentinels (`\x02`/`\x03`) so HTML is escaped in the web
   layer before `<mark>` is inserted — never inject markup from SQL.
-- `cc-index` and `cc-embed` are incremental/resumable; safe to re-run.
+- `cc-index` and `cc-embed` are incremental/resumable; safe to re-run. `cc-index` is
+  split by cost: the tiny `.metadata.json` sidecar refreshes on every run (a rename
+  lands without re-parsing anything), while re-parsing the `.jsonl` and rebuilding its
+  messages + chunks happens only when `conversations.source_sha256` changes. Detect
+  changes by **content, never mtime** — a fresh export rewrites every file's timestamp,
+  and a needless rebuild cascades `messages` → `message_chunks`, silently discarding
+  every embedding. Digesting the whole archive costs ~2s, so content is the cheap
+  check, not the expensive one.
 
 ## Formatting (clean, reviewable diffs)
 
