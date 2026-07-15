@@ -108,7 +108,7 @@ def import_main():
     _log()
 
     from claude_conversations.db import check_db, get_conn
-    from claude_conversations.importer import GREW, STALE, import_export
+    from claude_conversations.importer import GREW, STALE, ExportError, import_export
 
     check_db()
     # Snapshot first: what matters is what this import changed in the DATABASE, and
@@ -117,7 +117,12 @@ def import_main():
         before_uuids = {r["uuid"] for r in conn.execute("SELECT uuid FROM conversations").fetchall()}
         before_msgs = conn.execute("SELECT count(*) FROM messages").fetchone()["count"]
 
-    stats = import_export(args.export, reimport=args.reimport)
+    try:
+        stats = import_export(args.export, reimport=args.reimport)
+    except ExportError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        print("Get an export from claude.ai: Settings -> Privacy -> Export data.", file=sys.stderr)
+        sys.exit(1)
 
     with get_conn() as conn:
         after_uuids = conn.execute("SELECT count(*) FROM conversations").fetchone()["count"]

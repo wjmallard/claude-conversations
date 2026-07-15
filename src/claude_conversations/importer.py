@@ -37,6 +37,10 @@ from claude_conversations.db import get_conn
 
 _CONVERSATIONS_MEMBER = "conversations.json"
 
+
+class ExportError(Exception):
+    """The export cannot be read. Carries a message meant for the user, not a traceback."""
+
 # Per-conversation outcomes, reported against the DATABASE by cc-import.
 NEW = "new"              # not indexed before
 GREW = "grew"            # indexed, and the export carries messages we lack
@@ -168,19 +172,52 @@ _UPSERT_ARTIFACT = """
 
 
 def read_export(path) -> list[dict]:
-    """Return the conversation list from an export .zip, or a bare conversations.json."""
+    """Return the conversation list from an export .zip, or a bare conversations.json.
+
+    Raises ExportError with something a person can act on. Note that zipfile.is_zipfile
+    swallows OSError and simply returns False, so a missing or unreadable path would
+    otherwise fall through to the bare-JSON branch and surface as a stray traceback from
+    somewhere far less obvious.
+    """
     path = Path(path).expanduser()
+    if not path.exists():
+        raise ExportError(f"no such file: {path}")
+    if path.is_dir():
+        raise ExportError(
+            f"{path} is a directory. Point cc-import at the export .zip itself "
+            f"(the one claude.ai emailed you)."
+        )
+
     if zipfile.is_zipfile(path):
-        with zipfile.ZipFile(path) as z:
-            members = [n for n in z.namelist() if Path(n).name == _CONVERSATIONS_MEMBER]
-            if not members:
-                raise ValueError(f"{path}: archive contains no {_CONVERSATIONS_MEMBER}")
-            blob = z.read(members[0])
+        try:
+            with zipfile.ZipFile(path) as z:
+                members = [n for n in z.namelist() if Path(n).name == _CONVERSATIONS_MEMBER]
+                if not members:
+                    raise ExportError(
+                        f"{path.name} holds no {_CONVERSATIONS_MEMBER}, so it is not a "
+                        f"claude.ai export. Found: {', '.join(z.namelist()[:5]) or '(empty)'}"
+                    )
+                blob = z.read(members[0])
+        except zipfile.BadZipFile as exc:
+            raise ExportError(f"{path.name} is a damaged zip ({exc})") from exc
     else:
-        blob = path.read_bytes()
-    convs = orjson.loads(blob)
+        try:
+            blob = path.read_bytes()
+        except OSError as exc:
+            raise ExportError(f"cannot read {path}: {exc.strerror}") from exc
+
+    try:
+        convs = orjson.loads(blob)
+    except orjson.JSONDecodeError as exc:
+        raise ExportError(
+            f"{path.name} is neither a .zip nor valid JSON, so it is not a claude.ai "
+            f"export ({exc})"
+        ) from exc
     if not isinstance(convs, list):
-        raise ValueError(f"{path}: expected a JSON array of conversations")
+        raise ExportError(
+            f"{path.name} does not hold a list of conversations; a claude.ai export's "
+            f"conversations.json is a JSON array"
+        )
     return convs
 
 
