@@ -7,12 +7,13 @@ from datetime import date, datetime
 from flask import Flask, Response, abort, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 
-from claude_conversations import categories, classifier, config, parse, render
+from claude_conversations import categories, classifier, config, render
 from claude_conversations.db import (
     HL_START,
     HL_STOP,
     category_facets,
     check_db,
+    conversation_raw,
     conversations_by_uuids,
     count_conversations,
     count_fulltext,
@@ -248,10 +249,10 @@ def conversation(uuid):
         abort(404)
     with get_conn() as conn:
         meta = get_conversation(conn, uuid)
-    if not meta:
-        abort(404)
-    jsonl = config.CONVERSATIONS_DIR / (uuid + ".jsonl")
-    messages = [render.render_message(m) for m in parse.load_messages(jsonl)]
+        if not meta:
+            abort(404)
+        raws = conversation_raw(conn, uuid)
+    messages = [render.render_message(m) for m in raws]
     return render_template("detail.html", meta=meta, messages=messages, uuid=uuid)
 
 
@@ -333,10 +334,11 @@ def review_rerun():
 
 @app.route("/raw/<uuid>")
 def raw(uuid):
+    """The conversation exactly as claude.ai exported it, straight from messages.raw."""
     if not _UUID_RE.match(uuid):
         abort(404)
-    jsonl = config.CONVERSATIONS_DIR / (uuid + ".jsonl")
-    msgs = parse.load_messages(jsonl)
+    with get_conn() as conn:
+        msgs = conversation_raw(conn, uuid)
     if not msgs:
         abort(404)
     return Response(

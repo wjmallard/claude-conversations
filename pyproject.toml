@@ -27,7 +27,6 @@ semantic = [
 [project.scripts]
 cc-initdb = "claude_conversations.cli:initdb_main"
 cc-import = "claude_conversations.cli:import_main"
-cc-index = "claude_conversations.cli:index_main"
 cc-embed = "claude_conversations.cli:embed_main"
 cc-status = "claude_conversations.cli:status_main"
 cc-web = "claude_conversations.cli:web_main"

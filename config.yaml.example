@@ -1,5 +1,3 @@
-# Filesystem archive -- the source of truth. The database is a rebuildable index over it.
-conversations_dir: /path/to/exported/conversations
 
 # PostgreSQL database name (local, peer auth)
 db_name: claude_conversations

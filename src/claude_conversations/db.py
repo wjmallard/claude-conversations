@@ -645,6 +645,25 @@ def get_conversation(conn, uuid):
     ).fetchone()
 
 
+def conversation_raw(conn, uuid):
+    """Every message of a conversation exactly as exported, in export order.
+
+    This is what the detail view renders. It reads messages.raw rather than a file, so
+    browsing needs nothing but the database -- there is no archive on disk to mount,
+    misplace, or let drift away from what was imported.
+    """
+    rows = conn.execute(
+        """
+        SELECT raw
+        FROM messages
+        WHERE conv_uuid = %(uuid)s
+        ORDER BY seq
+        """,
+        {"uuid": uuid},
+    ).fetchall()
+    return [r["raw"] for r in rows if r["raw"] is not None]
+
+
 def conversations_by_uuids(conn, uuids):
     """Look up conversation rows for a list of uuids, keyed by uuid (review queue)."""
     if not uuids:

@@ -1,18 +1,19 @@
-"""Read and interpret the exported conversation files.
+"""Interpret the objects a claude.ai export contains. No file I/O: importer.py reads
+the zip, and everything here works on the parsed conversation and message objects.
 
-Export layout (one pair per conversation, in CONVERSATIONS_DIR):
-  <uuid>.metadata.json  -> {uuid, name, summary, created_at, updated_at, account:{uuid}}
-  <uuid>.jsonl          -> one message object per line, in conversation order:
-       {uuid, sender, created_at, parent_message_uuid, text, content:[...blocks...],
-        attachments:[...], files:[...], ...}
+A conversation object carries its metadata plus its messages inline:
+  {uuid, name, summary, created_at, updated_at, account:{uuid}, chat_messages:[...]}
+and each message:
+  {uuid, sender, created_at, updated_at, parent_message_uuid, text,
+   content:[...blocks...], attachments:[...], files:[...]}
 
 A conversation is a TREE, not a list: `parent_message_uuid` links each message to
 its parent, and editing a prompt or regenerating a reply adds a SIBLING rather than
 mutating the original. A message off the path to the newest leaf is not dead weight:
 abandoned branches hold real content, so every message is indexed and search never
-filters by path. File order is chronological (never tree order), so reading a .jsonl
-top-to-bottom interleaves every branch; walk parent_message_uuid to recover a single
-conversational path. See parent_uuid().
+filters by path. Export order is chronological (never tree order), so reading the
+messages start to finish interleaves every branch; walk parent_message_uuid to
+recover a single conversational path. See parent_uuid().
 
 A message's `content` is a list of typed blocks. The flattened top-level `text`
 field is unreliable for display (it contains "block not supported" placeholders
@@ -30,10 +31,6 @@ import hashlib
 import json
 import os
 import re
-from pathlib import Path
-
-META_SUFFIX = ".metadata.json"
-JSONL_SUFFIX = ".jsonl"
 
 # Every conversation's first message parents onto this sentinel rather than a real
 # message; it is universal in the archive (no other dangling parent exists) but is not
@@ -77,45 +74,6 @@ EMBED_CHUNK_CHARS = 24000
 # embedded prose stream -- see view_upload_names / message_texts.
 _UPLOADS_PREFIX = "/mnt/user-data/uploads/"
 _LINENO_RE = re.compile(r"(?m)^ *\d+\t")
-
-
-def iter_conversation_files(conversations_dir):
-    """Yield (uuid, jsonl_path, meta_path) for every conversation in the dir.
-
-    Driven by the .metadata.json files; a missing .jsonl yields path-not-exists
-    and is handled by the caller (still indexed as an empty conversation).
-    """
-    d = Path(conversations_dir)
-    for meta_path in sorted(d.glob("*" + META_SUFFIX)):
-        uuid = meta_path.name[: -len(META_SUFFIX)]
-        jsonl_path = d / (uuid + JSONL_SUFFIX)
-        yield uuid, jsonl_path, meta_path
-
-
-def load_metadata(meta_path) -> dict:
-    try:
-        with open(meta_path, encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-
-def load_messages(jsonl_path) -> list[dict]:
-    """Parse a .jsonl transcript into a list of message dicts, in file order."""
-    out = []
-    try:
-        with open(jsonl_path, encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    out.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    except FileNotFoundError:
-        pass
-    return out
 
 
 def parent_uuid(msg):
@@ -284,18 +242,13 @@ def text_sha256(text) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def file_sha256(path) -> str:
-    """Return the hex SHA-256 of a file's bytes for incremental-reindex comparison,
-    or '' if it does not exist.
+def messages_sha256(messages) -> str:
+    """Digest of a conversation's messages exactly as the export carries them.
 
-    Content, not mtime: a fresh export rewrites every file with a new timestamp, so
-    mtime+size bookkeeping reports the whole archive as changed and forces a full
-    rebuild -- which drops every embedding through the message_chunks cascade. Only a
-    genuinely changed transcript changes its digest, and digesting the entire archive
-    costs a couple of seconds.
+    Re-importing an export already indexed must be a no-op, so this is what tells an
+    unchanged conversation from a changed one. It hashes CONTENT, not a timestamp: an
+    export re-serializes everything, and rebuilding a conversation deletes and
+    recreates its chunks, which would otherwise churn work for nothing. Serialization
+    is canonical (orjson is deterministic), so identical messages always hash alike.
     """
-    try:
-        with open(path, "rb") as f:
-            return hashlib.file_digest(f, "sha256").hexdigest()
-    except FileNotFoundError:
-        return ""
+    return hashlib.sha256(json.dumps(messages, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()

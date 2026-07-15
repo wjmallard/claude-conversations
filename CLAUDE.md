@@ -6,27 +6,34 @@ modeled on, the `twitter-news` project (same stack and conventions).
 ## Architecture
 
 - Python 3, Flask, PostgreSQL (psycopg3, local peer auth), pgvector + pg_trgm.
-- **The filesystem is the source of truth; the database is a rebuildable index.**
-  Raw message content is NOT stored in the DB -- the detail view re-reads the
-  `.jsonl` from disk and renders it. The DB stores typed metadata and per-message
-  text split by **provenance**: `text` = prose (human-typed + assistant text),
-  which drives search + embeddings; `tool_text` = tool_use/tool_result I/O, stored
-  but never embedded. Thinking is not indexed. Embeddings cover prose only.
+- **The export .zip is the source of truth; the database is a rebuildable index.**
+  `cc-import` reads a zip and everything lands in Postgres -- there is NO archive on
+  disk and nothing is ever read back from one. (There used to be: a directory of split
+  `.jsonl` files. It held nothing the DB lacks, and its only lasting effect was drifting
+  out of sync with the export it came from. Do not reintroduce it; if plain files are
+  ever wanted, generate them on demand.)
+- `messages.raw` holds each message exactly as exported, so the UI renders from the DB.
+  Alongside it the DB stores typed metadata and per-message text split by
+  **provenance**: `text` = prose (human-typed + assistant text), which drives search +
+  embeddings; `tool_text` = tool_use/tool_result I/O, stored but never embedded.
+  Thinking is not indexed (but IS preserved in `raw`). Embeddings cover prose only.
 - Semantic search uses a **local MLX embedding model** (Qwen3-Embedding-0.6B,
-  `vector(1024)`, cosine via HNSW) -- no API cost. MLX deps are an optional
-  `semantic` extra so the base tool stays light.
+  `vector(1024)`, cosine) -- no API cost. MLX deps are an optional `semantic` extra so
+  the base tool stays light. There is deliberately no HNSW index: search is a threshold
+  query, which pgvector can only serve from a seq scan.
 - **Out of scope:** OCR, translation, images/media. Do not add them.
 
 ## Data model
 
 A claude.ai export is a `.zip` holding one big `conversations.json` (a JSON array of
-conversations, messages inline under `chat_messages`). `cc-import` reads it straight
-out of the zip and splits it into one pair per conversation in `conversations_dir`:
-- `<uuid>.metadata.json` -> `{uuid, name, summary, created_at, updated_at, account:{uuid}}`
-- `<uuid>.jsonl` -> one message per line: `{uuid, sender, created_at, parent_message_uuid, text, content:[blocks]}`
+conversations, each with its messages inline under `chat_messages`), plus small side
+files (users, memories, projects, reflections) kept verbatim in `export_artifacts`.
 
 Exports are often **incremental** (a recent window, not a snapshot), so importing
-merges: a conversation an export does not mention is left alone, never deleted.
+merges: a conversation an export does not mention is left alone, never deleted -- an
+incremental cannot tell "deleted upstream" from "outside the window". Import order is
+irrelevant: a conversation whose export `updated_at` predates what is indexed is
+ignored, so an old export cannot roll a newer one back.
 
 Always render from `content` blocks, never the flattened top-level `text` (it
 contains "block not supported" placeholders where tools ran). Block types:
@@ -49,11 +56,11 @@ typed.
 ## Layout
 
 - `src/claude_conversations/`: `config.py`, `db.py` (connection + search), `importer.py`
-  (export .zip -> archive, via orjson + stdlib zipfile), `parse.py`
-  (read/flatten export), `indexer.py`, `embedding.py` (MLX, lazy import),
-  `render.py` (content blocks -> HTML), `categories.py` (tag curation store),
-  `classifier.py` (layered keyword/semantic sieve), `cli.py`, `web/` (Flask app +
-  templates).
+  (export .zip -> Postgres, via orjson + stdlib zipfile; the whole ingest path),
+  `parse.py` (interpret conversation/message objects; no file I/O), `embedding.py`
+  (MLX, lazy import), `render.py` (content blocks -> HTML), `categories.py` (tag
+  curation store), `classifier.py` (layered keyword/semantic sieve), `cli.py`,
+  `web/` (Flask app + templates).
 - `sql/schema.sql`: idempotent (`IF NOT EXISTS`); `cc-initdb` applies it.
 - Config in `config.yaml` (see `config.yaml.example`); tag curation in
   `categories.json` -- on-disk source of truth, mirrored to `conversations.categories`.
@@ -63,14 +70,18 @@ typed.
 - psycopg uses `%`-style params, so the pg_trgm `<<%` operator is written `<<%%`.
 - Snippets highlight via sentinels (`\x02`/`\x03`) so HTML is escaped in the web
   layer before `<mark>` is inserted -- never inject markup from SQL.
-- `cc-index` and `cc-embed` are incremental/resumable; safe to re-run. `cc-index` is
-  split by cost: the tiny `.metadata.json` sidecar refreshes on every run (a rename
-  lands without re-parsing anything), while re-parsing the `.jsonl` and rebuilding its
-  messages + chunks happens only when `conversations.source_sha256` changes. Detect
-  changes by **content, never mtime** -- a fresh export rewrites every file's timestamp,
-  and a needless rebuild cascades `messages` -> `message_chunks`, silently discarding
-  every embedding. Digesting the whole archive costs ~2s, so content is the cheap
-  check, not the expensive one.
+- `cc-import` and `cc-embed` are incremental/resumable; safe to re-run. Import is split
+  by cost: conversation metadata refreshes every run (a rename lands for free), while
+  rebuilding a transcript's messages + chunks happens only when
+  `conversations.source_sha256` changes. Detect changes by **content, never a
+  timestamp** -- an export re-serializes everything, and upstream has silently added
+  fields to existing blocks before.
+- Rebuilding a conversation deletes and recreates its chunks (a cascade from
+  `messages`), so an embedding must never be owned by a chunk row. Vectors live in
+  `embeddings`, keyed by `sha256(text)`, which nothing cascades into -- an embedding is
+  a pure function of its text, so a rebuild costs no re-embedding.
+- Report against the **database**, not against intermediate state. Users care what
+  landed in the index they search.
 
 ## Formatting (clean, reviewable diffs)
 

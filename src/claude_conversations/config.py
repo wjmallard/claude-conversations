@@ -28,9 +28,6 @@ if not _CONFIG_PATH.exists():
 with open(_CONFIG_PATH) as f:
     _raw = yaml.safe_load(f) or {}
 
-# Filesystem archive (source of truth)
-CONVERSATIONS_DIR = Path(_raw.get("conversations_dir", "conversations")).expanduser()
-
 # Database
 DB_NAME = _raw.get("db_name", "claude_conversations")
 

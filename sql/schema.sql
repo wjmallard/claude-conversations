@@ -1,10 +1,10 @@
 -- claude-conversations schema.
 --
--- The filesystem (exported *.jsonl + *.metadata.json) is the source of truth.
--- This database is a rebuildable index over it: typed columns + full-text
--- (tsvector), fuzzy (pg_trgm), and semantic (pgvector) search. Raw message
--- content is NOT stored here -- the detail view re-reads the .jsonl from disk
--- and renders it. We persist only the plain text needed to drive search.
+-- The claude.ai export .zip is the source of truth. This database is a rebuildable
+-- index over it: typed columns + full-text (tsvector), fuzzy (pg_trgm), and semantic
+-- (pgvector) search, plus every message exactly as exported (messages.raw). cc-import
+-- reads a zip and writes all of this; nothing here is ever read back from disk, and
+-- there is no intermediate copy of the archive to drift out of sync with the export.
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -17,11 +17,9 @@ CREATE TABLE IF NOT EXISTS conversations (
     updated_at    TIMESTAMPTZ,
     account_uuid  TEXT,
     n_messages    INTEGER NOT NULL DEFAULT 0,
-    -- incremental-reindex bookkeeping: skip transcripts whose CONTENT is unchanged.
-    -- Content, not mtime: a fresh export rewrites every file with a new timestamp,
-    -- so mtime+size would rebuild the whole archive and drop every embedding via
-    -- the message_chunks cascade.
-    source_path   TEXT,
+    -- Digest of this conversation's messages AS EXPORTED. Re-importing an export
+    -- already indexed is a no-op: the digest matches, the transcript is not rebuilt,
+    -- and its cached embeddings are never disturbed.
     source_sha256 TEXT,
     indexed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- multi-label category tags; rebuildable mirror of categories.json
@@ -36,12 +34,24 @@ CREATE INDEX IF NOT EXISTS idx_conv_name_trgm ON conversations USING GIN (name g
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS categories TEXT[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_conv_categories ON conversations USING GIN (categories);
 
--- mtime+size bookkeeping replaced by the content digest (see source_sha256 above).
--- Digest-first: back-fill source_sha256 BEFORE applying this, or the first cc-index
--- rebuilds every conversation and re-embeds the whole archive.
+-- mtime+size bookkeeping replaced by a content digest; source_path is meaningless now
+-- that the export is read straight from the zip and never staged on disk.
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS source_sha256 TEXT;
 ALTER TABLE conversations DROP COLUMN IF EXISTS source_mtime;
 ALTER TABLE conversations DROP COLUMN IF EXISTS source_size;
+ALTER TABLE conversations DROP COLUMN IF EXISTS source_path;
+
+-- Everything else the export ships: users.json, memories.json, projects/<uuid>.json,
+-- reflections/<uuid>.json. Kept verbatim and unparsed -- nothing reads them yet, but
+-- they are in the file, so leaving them on the floor would just mean re-importing
+-- later to get them back. `uuid` is '' for the singletons (users, memories).
+CREATE TABLE IF NOT EXISTS export_artifacts (
+    kind        TEXT NOT NULL,          -- 'users' | 'memories' | 'projects' | ...
+    uuid        TEXT NOT NULL,          -- '' when the export ships exactly one
+    raw         JSONB NOT NULL,
+    imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (kind, uuid)
+);
 
 -- One row per message -- EVERY message, including those carrying no extractable text.
 -- A conversation is a tree (see parent_uuid), and a message with nothing indexable can

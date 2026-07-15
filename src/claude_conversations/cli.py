@@ -25,9 +25,27 @@ def _ensure_database() -> bool:
         return True
 
 
+def _prefer_lz4() -> bool:
+    """Ask the database for lz4 TOAST compression, keeping pglz if it isn't available.
+
+    Everything bulky here is TOASTed -- message text, tool I/O, the raw JSON -- and lz4
+    is both smaller and several times faster than the pglz default on this data. It is
+    set here rather than in schema.sql because a per-column `COMPRESSION lz4` hard-errors
+    on a server built without lz4, which would make the schema unusable on a stock build;
+    a rejected ALTER just leaves pglz in place. Compression is chosen at write time, so
+    this must land before anything is indexed.
+    """
+    try:
+        with psycopg.connect(dbname=config.DB_NAME, autocommit=True) as con:
+            con.execute(f'ALTER DATABASE "{config.DB_NAME}" SET default_toast_compression = lz4')
+        return True
+    except psycopg.Error:
+        return False
+
+
 def initdb_main():
     ap = argparse.ArgumentParser(description="Create the database and apply the schema")
-    ap.add_argument("--reset", action="store_true", help="Drop existing tables first (destroys the index, not your files)")
+    ap.add_argument("--reset", action="store_true", help="Drop the whole index first, keeping only the cached embeddings")
     args = ap.parse_args()
     _log()
 
@@ -35,44 +53,70 @@ def initdb_main():
     from claude_conversations.db import apply_schema, get_conn
     with get_conn() as conn:
         if args.reset:
+            # Drop the entire index and rebuild it empty from the schema. `embeddings`
+            # is the one deliberate survivor: it is keyed by content, so re-importing
+            # the same prose reuses its vectors and a reset costs no re-embedding.
+            # Everything else is cheap to rebuild from the export, so it goes -- a
+            # reset should leave nothing behind but the expensive part. Order follows
+            # the foreign keys.
+            conn.execute("DROP TABLE IF EXISTS export_artifacts CASCADE")
+            conn.execute("DROP TABLE IF EXISTS message_chunks CASCADE")
             conn.execute("DROP TABLE IF EXISTS messages CASCADE")
             conn.execute("DROP TABLE IF EXISTS conversations CASCADE")
         apply_schema(conn)
+    lz4 = _prefer_lz4()
     print(f"Database {config.DB_NAME!r} {'created' if created else 'ready'}; schema applied.")
-    print("Next: cc-index")
+    print(f"TOAST compression : {'lz4' if lz4 else 'pglz (lz4 unavailable on this server)'}")
+    print("Next: cc-import /path/to/your-export.zip")
 
 
 def import_main():
     ap = argparse.ArgumentParser(
-        description="Split a claude.ai export into the archive, then index it",
+        description="Import a claude.ai export (.zip) into the database",
     )
     ap.add_argument("export", help="Path to the export .zip (or a bare conversations.json)")
-    ap.add_argument("--no-index", action="store_true", help="Split into the archive but skip indexing")
+    ap.add_argument("--reimport", action="store_true",
+                    help="Rebuild every conversation in the export, even unchanged ones")
     args = ap.parse_args()
     _log()
 
-    from claude_conversations.importer import import_export
-    import_export(args.export)
-    if args.no_index:
-        print("Skipped indexing (--no-index); run cc-index when you're ready.")
-        return
+    from claude_conversations.db import check_db, get_conn
+    from claude_conversations.importer import GREW, STALE, import_export
 
-    from claude_conversations.db import check_db
-    from claude_conversations.indexer import index_archive
     check_db()
-    index_archive()
+    # Snapshot first: what matters is what this import changed in the DATABASE, and
+    # only the before/after can say that.
+    with get_conn() as conn:
+        before_uuids = {r["uuid"] for r in conn.execute("SELECT uuid FROM conversations").fetchall()}
+        before_msgs = conn.execute("SELECT count(*) FROM messages").fetchone()["count"]
+
+    stats = import_export(args.export, reimport=args.reimport)
+
+    with get_conn() as conn:
+        after_uuids = conn.execute("SELECT count(*) FROM conversations").fetchone()["count"]
+        after_msgs = conn.execute("SELECT count(*) FROM messages").fetchone()["count"]
+
+    statuses = stats["statuses"]
+    exported = set(statuses)
+    added = exported - before_uuids
+    present = exported & before_uuids
+    gained = {u for u in present if statuses[u] == GREW}
+    stale = {u for u in present if statuses[u] == STALE}
+    untouched = len(before_uuids - exported)
+
+    print(f"\nImported into {config.DB_NAME!r}:")
+    print(f"  {len(added):6d} conversations new to the database")
+    print(f"  {len(present):6d} already present"
+          + (f" ({len(gained)} gained new messages)" if present else ""))
+    if stale:
+        print(f"  {len(stale):6d} older here than what is already indexed (ignored)")
+    if untouched:
+        print(f"  {untouched:6d} in the database but not in this export (left alone)")
+    print(f"\nDatabase now holds {after_uuids} conversations "
+          f"({after_uuids - len(before_uuids):+d}) and {after_msgs} messages "
+          f"({after_msgs - before_msgs:+d}).")
 
 
-def index_main():
-    ap = argparse.ArgumentParser(description="Index conversations into the database")
-    ap.add_argument("--reindex", action="store_true", help="Re-process every conversation, ignoring the content-digest cache")
-    args = ap.parse_args()
-    _log()
-
-    from claude_conversations.db import check_db
-    from claude_conversations.indexer import index_archive
-    check_db()
-    index_archive(reindex=args.reindex)
 
 
 def embed_main():
@@ -99,7 +143,6 @@ def status_main():
     check_db()
     with get_conn() as conn:
         s = stats(conn)
-    print(f"conversations dir : {config.CONVERSATIONS_DIR}")
     print(f"database          : {config.DB_NAME}")
     print(f"conversations     : {s['conversations']}")
     print(f"messages indexed  : {s['messages']}")

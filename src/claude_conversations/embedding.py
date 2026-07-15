@@ -80,15 +80,20 @@ def backfill_embeddings() -> int:
     genuinely new prose is computed.
     """
     with get_conn() as conn:
+        # Shortest first, so _adaptive_batch_size packs each batch with similarly sized
+        # texts. text_len is in the select list because SELECT DISTINCT can only order
+        # by expressions it selects; it does not affect distinctness, being a function
+        # of text.
         rows = conn.execute("""
             SELECT DISTINCT
                 c.text_sha256,
-                c.text
+                c.text,
+                length(c.text) AS text_len
             FROM message_chunks c
             LEFT JOIN embeddings e ON e.text_sha256 = c.text_sha256
             WHERE e.text_sha256 IS NULL
               AND c.text <> ''
-            ORDER BY length(c.text)
+            ORDER BY text_len
         """).fetchall()
         if not rows:
             print("Nothing to embed -- every chunk's text already has a vector.", file=sys.stderr)

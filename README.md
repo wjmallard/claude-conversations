@@ -15,22 +15,20 @@ Requires PostgreSQL with the `pg_trgm` and `vector` extensions, and (for semanti
 search) Apple Silicon for the local MLX embedder.
 
 Get your archive from claude.ai: **Settings -> Privacy -> Export data**. You will be
-emailed a `.zip`; point `cc-import` straight at it, no unpacking needed.
+emailed a `.zip`; point `cc-import` at it.
 
 ```sh
-cp config.yaml.example config.yaml   # then edit conversations_dir / db_name
+cp config.yaml.example config.yaml   # then edit db_name if you like
 uv sync                              # base deps (keyword + fuzzy + browse)
 uv run cc-initdb                     # create database + schema
-uv run cc-import ~/Downloads/data-*.zip   # split into the archive, then index it
+uv run cc-import ~/Downloads/data-*.zip   # read the zip into Postgres
 uv run cc-web                        # serve at http://127.0.0.1:5005
 ```
 
-`cc-import` splits the export into one self-contained pair of files per conversation
-(`<uuid>.jsonl` + `<uuid>.metadata.json`) under `conversations_dir`, then indexes them.
-It **merges**: claude.ai also issues incremental exports covering only a recent window,
-and conversations an export does not mention are left alone, so importing an
-incremental adds and updates without deleting history. Re-importing an export you
-already have changes nothing.
+`cc-import` reads `conversations.json` out of the zip and writes everything to the
+database -- typed metadata, every message exactly as exported, and the split text
+that drives search -- plus the export's other files (users, memories, projects,
+reflections) stored verbatim.
 
 ### Semantic search (optional)
 
@@ -45,13 +43,12 @@ Then select **semantic** mode in the search bar.
 
 | Command | What it does |
 | --- | --- |
-| `cc-initdb [--reset]` | Create the database and apply `sql/schema.sql` (`--reset` drops tables first) |
-| `cc-import FILE [--no-index]` | Split a claude.ai export `.zip` into the archive, then index it (merges; never deletes) |
-| `cc-index [--reindex]` | Index conversations; incremental by transcript content digest (`--reindex` forces all) |
-| `cc-embed` | Embed messages with no embedding yet (resumable) |
+| `cc-initdb [--reset]` | Create the database and apply `sql/schema.sql` (`--reset` drops the index, keeping the cached embeddings) |
+| `cc-import FILE [--reimport]` | Import a claude.ai export `.zip` into the database (merges; never deletes) |
+| `cc-embed` | Embed any prose with no vector yet (resumable) |
 | `cc-status` | Show counts (conversations / messages / embedded) |
 | `cc-web` | Run the Flask UI |
 
-Re-run `cc-index` (and `cc-embed`) after adding new exports -- both are incremental.
-Re-exporting the whole archive is cheap: only conversations whose transcript content
-actually changed are re-parsed and re-embedded.
+Run `cc-import` on each new export as it arrives, then `cc-embed`. Both are
+incremental: only conversations that actually changed are rebuilt, and vectors are
+cached by content, so re-embedding happens only for prose that is genuinely new.
