@@ -12,14 +12,19 @@ drop every embedding through the message_chunks cascade. Both writes for a conve
 share one transaction, so a crash never records a digest for messages that were not
 written.
 
-Conversations whose files have disappeared are removed. Raw content is never stored --
-only the typed metadata and the provenance-split per-message text (prose + tool_text)
-that drives search.
+Conversations whose files have disappeared are removed.
+
+Every message in a transcript gets a row, carrying the tree link (parent_uuid), the
+provenance-split text that drives search (prose + tool_text), and the message exactly
+as exported (raw). Storing raw is what lets the UI render a conversation without
+re-reading the archive; the filesystem is still the source of truth, since every column
+here is rebuilt from it.
 """
 
 import sys
 from datetime import datetime
 
+from psycopg.types.json import Jsonb
 from tqdm import tqdm
 
 from claude_conversations import categories, config, parse
@@ -82,19 +87,23 @@ _INSERT_MSG = """
         uuid,
         conv_uuid,
         seq,
+        parent_uuid,
         sender,
         created_at,
         text,
-        tool_text
+        tool_text,
+        raw
     )
     VALUES (
         %(uuid)s,
         %(conv_uuid)s,
         %(seq)s,
+        %(parent_uuid)s,
         %(sender)s,
         %(created_at)s,
         %(text)s,
-        %(tool_text)s
+        %(tool_text)s,
+        %(raw)s
     )
     ON CONFLICT (uuid) DO NOTHING
 """
@@ -173,9 +182,10 @@ def index_archive(reindex=False, verbose=True):
             )
             rows, chunk_rows = [], []
             for seq, msg in enumerate(messages):
+                # Every message gets a row, even one with nothing indexable in it: the
+                # conversation is a tree, and a text-less message can still be an
+                # interior node whose children would otherwise dangle.
                 prose, tool = parse.message_texts(msg, upload_views)
-                if not prose and not tool:
-                    continue
                 muuid = msg.get("uuid") or f"{uuid}:{seq}"
                 created = _parse_ts(msg.get("created_at"))
                 sender = msg.get("sender")
@@ -183,10 +193,12 @@ def index_archive(reindex=False, verbose=True):
                     "uuid": muuid,
                     "conv_uuid": uuid,
                     "seq": seq,
+                    "parent_uuid": parse.parent_uuid(msg),
                     "sender": sender,
                     "created_at": created,
                     "text": prose,
                     "tool_text": tool or None,
+                    "raw": Jsonb(msg),
                 })
                 # Only prose is embedded. A short message yields one chunk; a long
                 # pasted document yields several (so semantic search covers it all).

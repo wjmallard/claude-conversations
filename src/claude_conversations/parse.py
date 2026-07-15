@@ -6,6 +6,14 @@ Export layout (one pair per conversation, in CONVERSATIONS_DIR):
        {uuid, sender, created_at, parent_message_uuid, text, content:[...blocks...],
         attachments:[...], files:[...], ...}
 
+A conversation is a TREE, not a list: `parent_message_uuid` links each message to
+its parent, and editing a prompt or regenerating a reply adds a SIBLING rather than
+mutating the original. A message off the path to the newest leaf is not dead weight:
+abandoned branches hold real content, so every message is indexed and search never
+filters by path. File order is chronological (never tree order), so reading a .jsonl
+top-to-bottom interleaves every branch; walk parent_message_uuid to recover a single
+conversational path. See parent_uuid().
+
 A message's `content` is a list of typed blocks. The flattened top-level `text`
 field is unreliable for display (it contains "block not supported" placeholders
 where tools ran), so we always work from `content`. Block types seen in the data:
@@ -26,6 +34,11 @@ from pathlib import Path
 
 META_SUFFIX = ".metadata.json"
 JSONL_SUFFIX = ".jsonl"
+
+# Every conversation's first message parents onto this sentinel rather than a real
+# message; it is universal in the archive (no other dangling parent exists) but is not
+# itself a message. Treat it as the conversation's virtual root -- see parent_uuid().
+ROOT_PARENT_UUID = "00000000-0000-4000-8000-000000000000"
 
 # Attachment routing: prose documents (txt/md/docx/pdf/...) join the embedded prose
 # stream; everything else (pasted source code, TSV/CSV, JSON/YAML, logs) is routed
@@ -103,6 +116,22 @@ def load_messages(jsonl_path) -> list[dict]:
     except FileNotFoundError:
         pass
     return out
+
+
+def parent_uuid(msg):
+    """The uuid of a message's parent, or None when the message is a conversation head.
+
+    The export parents every head message onto ROOT_PARENT_UUID, which is not itself a
+    message; normalizing it to None lets `parent_uuid IS NULL` find the heads.
+
+    A conversation can have SEVERAL heads -- revising an opening prompt forks at the
+    root. So treat the sentinel as a virtual root the heads hang off, not as a
+    guarantee of a single first message.
+    """
+    p = msg.get("parent_message_uuid")
+    if not p or p == ROOT_PARENT_UUID:
+        return None
+    return p
 
 
 def _tool_result_text(block) -> str:

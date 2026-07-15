@@ -43,27 +43,41 @@ ALTER TABLE conversations ADD COLUMN IF NOT EXISTS source_sha256 TEXT;
 ALTER TABLE conversations DROP COLUMN IF EXISTS source_mtime;
 ALTER TABLE conversations DROP COLUMN IF EXISTS source_size;
 
--- One row per searchable message (messages with no extractable text are skipped).
--- Search operates on messages, then aggregates the best score per conversation.
+-- One row per message -- EVERY message, including those carrying no extractable text.
+-- A conversation is a tree (see parent_uuid), and a message with nothing indexable can
+-- still be an interior node, so skipping it would break the chain below it.
+-- Search operates on messages (filtering text <> ''), then aggregates the best score
+-- per conversation.
 CREATE TABLE IF NOT EXISTS messages (
     uuid        TEXT PRIMARY KEY,
     conv_uuid   TEXT NOT NULL REFERENCES conversations(uuid) ON DELETE CASCADE,
     seq         INTEGER NOT NULL,            -- position within the conversation (file order)
+    -- Parent in the conversation tree; NULL marks a conversation HEAD. There may be
+    -- SEVERAL heads: revising an opening prompt forks at the root. The export's root
+    -- sentinel is normalized away -- see parse.parent_uuid.
+    parent_uuid TEXT,
     sender      TEXT,                        -- 'human' | 'assistant'
     created_at  TIMESTAMPTZ,
-    text        TEXT NOT NULL,               -- PROSE only: human-typed + assistant text
+    text        TEXT NOT NULL,               -- PROSE only: human-typed + assistant text; '' when none
     text_tsv    TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
-    tool_text   TEXT                         -- tool_use inputs + tool_result text; not embedded
+    tool_text   TEXT,                        -- tool_use inputs + tool_result text; not embedded
+    -- The message exactly as exported. The UI renders from this, so browsing no longer
+    -- re-reads the .jsonl (and works with the archive drive unmounted). The filesystem
+    -- is still the source of truth: cc-index rebuilds this column from it.
+    raw         JSONB
 );
 
 -- Idempotent migration for pre-existing databases.
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS tool_text TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS parent_uuid TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS raw JSONB;
 -- Embeddings moved to message_chunks (long pasted documents are split into chunks);
 -- drop the old per-message embedding column + its index when upgrading.
 ALTER TABLE messages DROP COLUMN IF EXISTS embedding;
 
 CREATE INDEX IF NOT EXISTS idx_msg_conv      ON messages(conv_uuid, seq);
 CREATE INDEX IF NOT EXISTS idx_msg_created   ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_msg_parent    ON messages(parent_uuid);
 CREATE INDEX IF NOT EXISTS idx_msg_text_tsv  ON messages USING GIN (text_tsv);
 CREATE INDEX IF NOT EXISTS idx_msg_text_trgm ON messages USING GIN (text gin_trgm_ops);
 
