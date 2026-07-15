@@ -6,7 +6,7 @@ tool results become collapsible sections. Images are not rendered (by design).
 
 Safety: prose from you/Claude is rendered as Markdown (trusted, local, single
 user). Untrusted web content inside tool results is HTML-escaped and shown as
-plain text — never rendered as Markdown/HTML.
+plain text -- never rendered as Markdown/HTML.
 """
 
 import json
@@ -36,7 +36,7 @@ def _render_tool_use(b) -> Markup:
     pretty = json.dumps(inp, indent=2, ensure_ascii=False) if inp is not None else ""
     summary = Markup('🔧 <span class="tool-name">{}</span>').format(name)
     if msg:
-        summary += Markup(' <span class="muted">— {}</span>').format(msg)
+        summary += Markup(' <span class="muted">&mdash; {}</span>').format(msg)
     body = Markup('<pre class="json">{}</pre>').format(pretty) if pretty else Markup("")
     return _details("tool", summary, body)
 
@@ -129,7 +129,7 @@ def _render_attachments(msg) -> Markup:
         body = Markup('<pre class="att-body">{}</pre>').format(content[:_ATTACH_DISPLAY_CAP])
         if len(content) > _ATTACH_DISPLAY_CAP:
             body += Markup(
-                '<div class="muted att-more">… {} more characters —'
+                '<div class="muted att-more">&hellip; {} more characters &mdash;'
                 ' open <b>raw</b> (top of page) for the full document</div>'
             ).format(f"{len(content) - _ATTACH_DISPLAY_CAP:,}")
         out.append(_details("attachment", summary, body))
@@ -137,7 +137,7 @@ def _render_attachments(msg) -> Markup:
 
 
 def _file_names(msg) -> list[str]:
-    """Names of content-free uploads (the `files` list — images/binaries); their
+    """Names of content-free uploads (the `files` list -- images/binaries); their
     bytes aren't in the export, so they surface only as a filename footer."""
     names = []
     for a in msg.get("files") or []:

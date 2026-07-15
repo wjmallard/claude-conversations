@@ -2,7 +2,7 @@
 
 Layered, cheap-to-expensive assignment of category tags to conversations:
 
-  Layer 1 (keyword) — match each category's *strong* seed terms (word-boundary,
+  Layer 1 (keyword) -- match each category's *strong* seed terms (word-boundary,
   case-insensitive) against conversation title + summary. A strong match
   auto-assigns the category (confidence 0.9). For bounded-window categories
   (both date_start and date_end set) matches are hard-gated to the window, so a
@@ -11,11 +11,11 @@ Layered, cheap-to-expensive assignment of category tags to conversations:
   matched in message bodies (substantial presence) to catch content buried in a
   conversation about another topic.
 
-  Layer 1.5 (topic) — body-scan a vocabulary shared by sibling categories that are
+  Layer 1.5 (topic) -- body-scan a vocabulary shared by sibling categories that are
   separated by date, and route each matched conversation to whichever sibling's
   window contains it, respecting each category's hard window.
 
-The category vocabulary and all routing live in config.yaml — this module is
+The category vocabulary and all routing live in config.yaml -- this module is
 taxonomy-agnostic and hardcodes no slugs.
 
 Proposals are written to the curation file via categories.apply_proposal (which
@@ -46,7 +46,7 @@ def _alt_regex(terms):
 
 def _strong_match_uuids(conn, rx, scope, date_start=None, date_end=None):
     """Conversation uuids whose text matches `rx`. scope='title' searches the title
-    only (highest precision — for topics like politics whose terms recur as described
+    only (highest precision -- for topics like politics whose terms recur as described
     content in other conversations' summaries); scope='meta' searches title + summary
     (what the conversation is *about*); scope='all' also searches message bodies. If
     date_start/date_end are both given (a bounded category window), matches are
@@ -87,7 +87,7 @@ def _strong_match_uuids(conn, rx, scope, date_start=None, date_end=None):
 
 def _body_match_uuids(conn, rx, min_messages=3):
     """Conversation uuids where at least `min_messages` message bodies match `rx`.
-    The threshold enforces *substantial* presence — a couple of incidental mentions
+    The threshold enforces *substantial* presence -- a couple of incidental mentions
     buried in an off-topic conversation are left to search/MCP, not auto-tagged."""
     rows = conn.execute(
         """
@@ -162,7 +162,7 @@ def topic_date_split_pass(
         ).fetchall()
         for r in rows:
             existing = set(categories.tags_for(data, r["conv_uuid"]))
-            if existing:  # a title-based tag is the stronger signal — don't override
+            if existing:  # a title-based tag is the stronger signal -- don't override
                 counts["skipped(already tagged)"] = counts.get("skipped(already tagged)", 0) + 1
                 continue
             dd = r["created_at"].date() if r["created_at"] else None
@@ -172,7 +172,7 @@ def topic_date_split_pass(
                 slug = early_slug
             elif dd and lstart and dd >= lstart:  # postdates both windows -> late
                 slug = late_slug
-            else:  # before the late cutoff and outside both windows — don't tag
+            else:  # before the late cutoff and outside both windows -- don't tag
                 counts["skipped(outside windows)"] = counts.get("skipped(outside windows)", 0) + 1
                 continue
             categories.apply_proposal(data, r["conv_uuid"], slug, confidence, "topic")
@@ -187,15 +187,15 @@ def keyword_pass(scope="meta", confidence=0.9, purpose_confidence=0.7, body_conf
     keyword-method tags (on unlocked conversations) before re-applying.
 
     Matchers per category:
-      * strong seeds — matched in title+summary (or title only, per the category's
+      * strong seeds -- matched in title+summary (or title only, per the category's
         `scope`), hard-gated to the date window when the category is bounded. A match
         means the conversation is genuinely ABOUT the category: it tags (method
         'keyword') and seeds the semantic centroid.
-      * purpose seeds (optional) — project/purpose terms (title+summary) that tag the
+      * purpose seeds (optional) -- project/purpose terms (title+summary) that tag the
         conversation by PURPOSE (method 'keyword-purpose') WITHOUT seeding the centroid
-        — e.g. the Twitter-archive coding chats are politics-by-purpose, but their
+        -- e.g. the Twitter-archive coding chats are politics-by-purpose, but their
         prose is code and would muddy the politics centroid.
-      * body seeds (optional) — ultra-distinctive terms matched in message bodies.
+      * body seeds (optional) -- ultra-distinctive terms matched in message bodies.
 
     Returns {slug: n_conversations_tagged}.
     """
@@ -275,7 +275,7 @@ def semantic_decisions(date_split_groups=None):
     tags from a prior run are excluded, so the layer never bootstraps on itself).
     Conversations that already carry a tag, or are user-locked, are not candidates.
     Bounded categories are hard date-gated. `date_split_groups` defaults to
-    config.DATE_SPLIT_GROUPS (config.yaml `date_split_groups`) — categories that share
+    config.DATE_SPLIT_GROUPS (config.yaml `date_split_groups`) -- categories that share
     a topic but are separated by date, whose centroids are near-identical. For those
     the match score is the group's best centroid similarity, but the assigned member
     is the one whose hard window contains the conversation (narrowest wins), mirroring
@@ -293,9 +293,9 @@ def semantic_decisions(date_split_groups=None):
         for slug, tag in rec.get("tags", {}).items():
             method = tag.get("method")
             if method != "semantic":
-                tagged.add(uuid)                          # already classified — not a candidate
+                tagged.add(uuid)                          # already classified -- not a candidate
             if method in ("keyword", "topic", "user"):
-                seeds.setdefault(slug, []).append(uuid)   # genuinely about it — seeds the centroid
+                seeds.setdefault(slug, []).append(uuid)   # genuinely about it -- seeds the centroid
     seed_counts = {slug: len(uuids) for slug, uuids in seeds.items()}
     group_of = {}
     for group in date_split_groups:
@@ -382,7 +382,7 @@ def semantic_pass(threshold=None, dry_run=False, verbose=True):
                 f"  {slug:16s} seeds {seed_counts.get(slug, 0):4d}"
                 f"  ->  proposals {counts.get(slug, 0):4d}"
             )
-        note = "  (dry run — nothing written)" if dry_run else ""
+        note = "  (dry run -- nothing written)" if dry_run else ""
         print(f"  {'TOTAL':16s} proposals {len(proposals):4d}{note}")
 
     return {
@@ -400,7 +400,7 @@ def predictions_for(uuids, floor=0.2):
     """Per-conversation cosine similarity to every category centroid, date-gated and
     kept only when >= floor. Centroids are built from the CURRENT keyword/topic/user
     seeds, so this reflects the user's confirmations live. Returns {uuid: {slug: sim}}
-    (each conversation's predictions sorted high to low) — the review UI shows these so
+    (each conversation's predictions sorted high to low) -- the review UI shows these so
     every plausible category is visible, not just the committed top pick."""
     targets = list(uuids)
     if not targets:

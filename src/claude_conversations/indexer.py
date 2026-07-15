@@ -1,7 +1,7 @@
 """Scan the conversations directory and (re)build the database index.
 
 Incremental, and split by cost. The .metadata.json sidecar is tiny, so its fields are
-refreshed on every run — a renamed or re-summarized conversation lands without touching
+refreshed on every run -- a renamed or re-summarized conversation lands without touching
 the transcript. The expensive half (re-parsing the .jsonl, rebuilding its messages and
 embedding chunks) runs only when that file's CONTENT digest changed, or with
 reindex=True.
@@ -12,7 +12,7 @@ drop every embedding through the message_chunks cascade. Both writes for a conve
 share one transaction, so a crash never records a digest for messages that were not
 written.
 
-Conversations whose files have disappeared are removed. Raw content is never stored —
+Conversations whose files have disappeared are removed. Raw content is never stored --
 only the typed metadata and the provenance-split per-message text (prose + tool_text)
 that drives search.
 """
@@ -230,7 +230,7 @@ def index_archive(reindex=False, verbose=True):
                 removed = len(gone)
 
         # Re-apply category tags from the curation file (rebuildable index).
-        # Tags are auxiliary — never fail an index over them.
+        # Tags are auxiliary -- never fail an index over them.
         try:
             categories.sync_to_db(conn)
         except Exception as exc:

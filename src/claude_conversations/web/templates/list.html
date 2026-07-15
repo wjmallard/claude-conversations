@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set mode_labels = {'word': 'Keyword', 'char': 'Fuzzy', 'semantic': 'Semantic'} %}
-{% block title %}{% if q %}{{ q }} — {% endif %}Claude Conversations{% endblock %}
+{% block title %}{% if q %}{{ q }} &mdash; {% endif %}Claude Conversations{% endblock %}
 {% block content %}
 
 {% if categories_vocab %}

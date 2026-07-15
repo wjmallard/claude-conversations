@@ -80,7 +80,7 @@ def backfill_embeddings() -> int:
             ORDER BY length(text)
         """).fetchall()
         if not rows:
-            print("Nothing to embed — all chunks already have embeddings.", file=sys.stderr)
+            print("Nothing to embed -- all chunks already have embeddings.", file=sys.stderr)
             return 0
 
         load_model()
@@ -106,7 +106,7 @@ def backfill_embeddings() -> int:
                 i += batch_size
         except KeyboardInterrupt:
             conn.commit()
-            print("\nInterrupted — progress saved; rerun cc-embed to continue.", file=sys.stderr)
+            print("\nInterrupted -- progress saved; rerun cc-embed to continue.", file=sys.stderr)
         finally:
             progress.close()
 

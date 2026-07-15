@@ -3,7 +3,7 @@
 -- The filesystem (exported *.jsonl + *.metadata.json) is the source of truth.
 -- This database is a rebuildable index over it: typed columns + full-text
 -- (tsvector), fuzzy (pg_trgm), and semantic (pgvector) search. Raw message
--- content is NOT stored here — the detail view re-reads the .jsonl from disk
+-- content is NOT stored here -- the detail view re-reads the .jsonl from disk
 -- and renders it. We persist only the plain text needed to drive search.
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;

@@ -1,4 +1,4 @@
-# Filesystem archive — the source of truth. The database is a rebuildable index over it.
+# Filesystem archive -- the source of truth. The database is a rebuildable index over it.
 conversations_dir: /path/to/exported/conversations
 
 # PostgreSQL database name (local, peer auth)
@@ -7,7 +7,7 @@ db_name: claude_conversations
 # Flask
 flask_port: 5005
 
-# Embeddings (local MLX model, Apple Silicon — no API cost)
+# Embeddings (local MLX model, Apple Silicon -- no API cost)
 embedding_model_id: mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ
 embedding_similarity_floor: 0.4
 

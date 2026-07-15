@@ -19,7 +19,7 @@ def _ensure_database() -> bool:
         psycopg.connect(dbname=config.DB_NAME).close()
         return False
     except psycopg.OperationalError:
-        # DB likely missing — create it from the maintenance database.
+        # DB likely missing -- create it from the maintenance database.
         with psycopg.connect(dbname="postgres", autocommit=True) as con:
             con.execute(f'CREATE DATABASE "{config.DB_NAME}"')
         return True

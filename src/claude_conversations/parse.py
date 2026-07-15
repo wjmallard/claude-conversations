@@ -12,7 +12,7 @@ where tools ran), so we always work from `content`. Block types seen in the data
   text, thinking, tool_use (name+input+message), tool_result (name+content),
   token_budget (skip), flag (rare). Images are ignored by design.
 
-Pasted/uploaded documents are NOT content blocks — they live in the message-level
+Pasted/uploaded documents are NOT content blocks -- they live in the message-level
 `attachments` list ({file_name, file_type, file_size, extracted_content}); the
 `files` list holds content-free references to binary uploads (images). See
 message_texts() for how attachment text is folded into the searchable streams.
@@ -27,9 +27,9 @@ from pathlib import Path
 META_SUFFIX = ".metadata.json"
 JSONL_SUFFIX = ".jsonl"
 
-# Attachment routing: prose documents (txt/md/docx/pdf/…) join the embedded prose
+# Attachment routing: prose documents (txt/md/docx/pdf/...) join the embedded prose
 # stream; everything else (pasted source code, TSV/CSV, JSON/YAML, logs) is routed
-# to the non-embedded tool text — searchable, but kept out of the semantic centroids.
+# to the non-embedded tool text -- searchable, but kept out of the semantic centroids.
 _PROSE_ATTACHMENT_TYPES = {
     "application/pdf",
     "doc",
@@ -61,7 +61,7 @@ EMBED_CHUNK_CHARS = 24000
 
 # Newer claude.ai uploads land in /mnt/user-data/uploads/ and are read via the `view`
 # tool; that content (the user's own documents) is promoted from tool text into the
-# embedded prose stream — see view_upload_names / message_texts.
+# embedded prose stream -- see view_upload_names / message_texts.
 _UPLOADS_PREFIX = "/mnt/user-data/uploads/"
 _LINENO_RE = re.compile(r"(?m)^ *\d+\t")
 
@@ -156,13 +156,13 @@ def view_upload_names(messages) -> dict:
 def message_texts(msg, upload_views=None) -> tuple[str, str]:
     """Split a message's content blocks by provenance: returns (prose, tool).
 
-    prose — human-typed + assistant prose (text blocks), plus the extracted text of
+    prose -- human-typed + assistant prose (text blocks), plus the extracted text of
             any pasted *prose* documents. This is the real conversation: it drives
             full-text/fuzzy/semantic search, categorization, and embeddings.
             Combined with the `sender` column it also isolates what the *user*
             actually contributed (sender=human, non-empty prose) from tool-results
             that arrive as human-role messages.
-    tool  — tool_use (name + JSON input) + tool_result text, plus the text of pasted
+    tool  -- tool_use (name + JSON input) + tool_result text, plus the text of pasted
             *code/data* documents. Stored separately so it stays searchable, but it
             is never embedded (machine/code text isn't "what a conversation is about").
 
@@ -171,7 +171,7 @@ def message_texts(msg, upload_views=None) -> tuple[str, str]:
     (see _attachment_is_prose). Content-free uploads (msg["files"], images) are
     ignored here and only surface as filenames in the detail view.
 
-    Thinking, token_budget, flag, and images are dropped — not indexed (they remain
+    Thinking, token_budget, flag, and images are dropped -- not indexed (they remain
     on disk and are rendered in the detail view). Either string may be ''.
     """
     prose, tool = [], []
@@ -255,7 +255,7 @@ def file_sha256(path) -> str:
 
     Content, not mtime: a fresh export rewrites every file with a new timestamp, so
     mtime+size bookkeeping reports the whole archive as changed and forces a full
-    rebuild — which drops every embedding through the message_chunks cascade. Only a
+    rebuild -- which drops every embedding through the message_chunks cascade. Only a
     genuinely changed transcript changes its digest, and digesting the entire archive
     costs a couple of seconds.
     """

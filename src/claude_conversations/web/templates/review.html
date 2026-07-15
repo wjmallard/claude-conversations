@@ -10,7 +10,7 @@
       <button class="btn-rerun" type="submit" title="Recompute predictions from your confirmed labels (a few seconds)">↻ Re-run predictions</button>
     </form>
   </div>
-  <p class="muted hint">Click chips to adjust, then <b>Confirm</b> to accept or <b>Dismiss</b> to reject — saves instantly, no clicking in. The dashed chip is the predicted match. Re-run after confirming a batch to fold your labels back in.</p>
+  <p class="muted hint">Click chips to adjust, then <b>Confirm</b> to accept or <b>Dismiss</b> to reject &mdash; saves instantly, no clicking in. The dashed chip is the predicted match. Re-run after confirming a batch to fold your labels back in.</p>
   <nav class="tagbar">
     <a class="tagfilter {{ 'on' if not category }}" href="{{ url_for('review', df=df or none, dt=dt or none, q=q or none) }}">all <span class="n">{{ counts.values() | sum }}</span></a>
     {% for c in categories_vocab %}
@@ -88,7 +88,7 @@
       })
       .catch(function () {
         card.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
-        alert('Save failed — is the server up?');
+        alert('Save failed -- is the server up?');
       });
   }
   document.querySelectorAll('.rcard').forEach(function (card) {
@@ -108,7 +108,7 @@
     var b = rerunForm.querySelector('button');
     b.disabled = true; b.textContent = '↻ Re-running…';
   });
-  // instant client-side title filter (the top search box) — hides non-matching cards
+  // instant client-side title filter (the top search box) -- hides non-matching cards
   // on the current page as you type; Enter still submits for a full server-side filter.
   var qbox = document.querySelector('.search input[name=q]');
   if (qbox) qbox.addEventListener('input', function () {

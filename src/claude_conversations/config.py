@@ -55,7 +55,7 @@ CATEGORIES = _raw.get("categories") or []
 CATEGORIES_BY_SLUG = {c["slug"]: c for c in CATEGORIES if c.get("slug")}
 CATEGORY_SLUGS = [c["slug"] for c in CATEGORIES if c.get("slug")]
 
-# Classifier routing — the taxonomy lives here, never in code, so the tool stays
+# Classifier routing -- the taxonomy lives here, never in code, so the tool stays
 # category-agnostic (and a gitignored config.yaml keeps a private taxonomy private).
 # TOPIC_ROUTING drives the layer-1.5 topic pass; DATE_SPLIT_GROUPS tells the semantic
 # layer which categories share a topic but are separated by date. Both optional.

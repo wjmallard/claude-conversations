@@ -1,8 +1,8 @@
 """Database connection and queries.
 
-Search is FIELD-SCOPED: each mode searches a selected set of fields —
-  title · summary · you (human prose) · assistant (assistant prose) · tools (tool I/O)
-— defaulting to your + assistant prose. Keyword/fuzzy support all five; semantic
+Search is FIELD-SCOPED: each mode searches a selected set of fields --
+  title / summary / you (human prose) / assistant (assistant prose) / tools (tool I/O)
+-- defaulting to your + assistant prose. Keyword/fuzzy support all five; semantic
 only supports the embedded prose fields (you/assistant). A message-level date
 window further restricts the message-derived fields (you/assistant/tools); title
 and summary are conversation-level and not date-filtered.
@@ -57,7 +57,7 @@ def _search_order(sort):
 
 
 def _msg_date_clause(date_from, date_to, alias="m"):
-    """SQL fragment (leading ' AND …') + params restricting <alias>.created_at to
+    """SQL fragment (leading ' AND ...') + params restricting <alias>.created_at to
     [date_from, date_to]; date_to is inclusive of its whole day. Empty if no window."""
     clauses, params = [], {}
     if date_from:
@@ -472,7 +472,7 @@ def semantic_centroid_scores(conn, seeds, exclude):
 
     `seeds` maps slug -> list of seed conv uuids; `exclude` is the set of uuids NOT
     to score as candidates (the seed conversations plus user-locked ones). Returns
-    rows {uuid, name, created_at, slug, sim} for every (candidate, category) pair —
+    rows {uuid, name, created_at, slug, sim} for every (candidate, category) pair --
     candidates are conversations that have an embedding and are not in `exclude`."""
     seed_uuids, seed_slugs = [], []
     for slug, uuids in seeds.items():
@@ -524,7 +524,7 @@ def semantic_centroid_scores(conn, seeds, exclude):
 
 def centroid_scores_for(conn, seeds, target_uuids):
     """Cosine similarity of each target conversation's centroid to every category
-    centroid — for showing all plausible categories (not just the top pick) in the
+    centroid -- for showing all plausible categories (not just the top pick) in the
     review UI. Centroids are computed only over the seed + target conversations, so
     this stays cheap enough to run per page load. `seeds` maps slug -> seed conv
     uuids. Returns rows {uuid, created_at, slug, sim}."""

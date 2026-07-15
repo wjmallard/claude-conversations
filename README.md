@@ -4,9 +4,9 @@ An offline browser and search engine for exported Claude conversations.
 
 - **Browse** conversations, sorted by date / title / length.
 - **Search** with three modes:
-  - **keyword** — Postgres full-text (`tsvector`), stemmed, with highlighted snippets
-  - **fuzzy** — `pg_trgm` trigram similarity, typo- and substring-tolerant
-  - **semantic** — local MLX embeddings (Qwen3) + `pgvector` cosine, concept search
+  - **keyword** -- Postgres full-text (`tsvector`), stemmed, with highlighted snippets
+  - **fuzzy** -- `pg_trgm` trigram similarity, typo- and substring-tolerant
+  - **semantic** -- local MLX embeddings (Qwen3) + `pgvector` cosine, concept search
 - **Read** a conversation with Markdown rendering and collapsible thinking / tool-call / tool-result blocks.
 
 ## Setup
@@ -41,6 +41,6 @@ Then select **semantic** mode in the search bar.
 | `cc-status` | Show counts (conversations / messages / embedded) |
 | `cc-web` | Run the Flask UI |
 
-Re-run `cc-index` (and `cc-embed`) after adding new exports — both are incremental.
+Re-run `cc-index` (and `cc-embed`) after adding new exports -- both are incremental.
 Re-exporting the whole archive is cheap: only conversations whose transcript content
 actually changed are re-parsed and re-embedded.

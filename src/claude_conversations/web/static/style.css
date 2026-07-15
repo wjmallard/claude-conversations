@@ -104,7 +104,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 /* search-mode chips: live highlight for the checked radio (no JS needed) */
 .chip:has(input:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* category tags — filter bar + chips */
+/* category tags -- filter bar + chips */
 .tagbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 .tagfilter { font-size: 12.5px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap; }
 .tagfilter:hover { text-decoration: none; border-color: var(--accent); }

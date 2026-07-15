@@ -1,7 +1,7 @@
 """Category-tag curation store.
 
 The curation (which conversation has which category tags) lives on disk in a
-single JSON file (config.CATEGORIES_PATH) — that file is the source of truth.
+single JSON file (config.CATEGORIES_PATH) -- that file is the source of truth.
 The conversations.categories array column in PostgreSQL is a rebuildable index
 of it, used for fast filtering/faceting in the web UI.
 
@@ -21,19 +21,19 @@ File shape:
     }
 
 `method` records how a tag was assigned:
-  * keyword — a strong seed matched the title/summary: the conversation is
+  * keyword -- a strong seed matched the title/summary: the conversation is
     genuinely ABOUT the category. Seeds the semantic centroid.
-  * keyword-purpose — a purpose seed matched: the project exists FOR the category
+  * keyword-purpose -- a purpose seed matched: the project exists FOR the category
     (a coding chat built for, say, a political archive). Tags without seeding the
     centroid.
-  * topic — a shared body vocabulary matched, routed to one of several sibling
+  * topic -- a shared body vocabulary matched, routed to one of several sibling
     categories by date window. Yields to an existing tag (a title hit is stronger).
-  * semantic — proposed by cosine similarity to the category centroid; surfaced in
+  * semantic -- proposed by cosine similarity to the category centroid; surfaced in
     the review UI for confirmation.
-  * user — set by hand in the web UI.
+  * user -- set by hand in the web UI.
 
 A user edit sets the exact tag set, marks the conversation `locked`, and the
-classifier then leaves it alone — so manual corrections are sticky across re-runs
+classifier then leaves it alone -- so manual corrections are sticky across re-runs
 of the sieve.
 """
 
@@ -99,7 +99,7 @@ def set_user_tags(data, uuid, slugs):
 
 def apply_proposal(data, uuid, slug, confidence, method):
     """Add/refresh a classifier-proposed tag, unless the conversation is locked
-    (user-edited) — then leave it untouched. Keeps the higher confidence when the
+    (user-edited) -- then leave it untouched. Keeps the higher confidence when the
     tag already exists. Mutates `data`."""
     if slug not in valid_slugs():
         return data
@@ -157,7 +157,7 @@ def sync_to_db(conn, data=None):
 
 
 def method_map(data=None):
-    """{uuid: {slug: method}} over all tagged conversations — lets the UI tell
+    """{uuid: {slug: method}} over all tagged conversations -- lets the UI tell
     semantic *proposals* apart from confirmed (user) and auto (keyword/topic) tags."""
     if data is None:
         data = load()
@@ -172,9 +172,9 @@ def proposal_queue(data=None):
     """Conversations carrying at least one semantic proposal, for the review UI.
 
     Returns (queue, counts):
-      queue  — [{uuid, proposed: {slug: confidence}, other: {slug: method}, score}],
+      queue  -- [{uuid, proposed: {slug: confidence}, other: {slug: method}, score}],
                sorted by descending top-proposal confidence;
-      counts — {slug: n} proposals per category, for the review filter bar.
+      counts -- {slug: n} proposals per category, for the review filter bar.
     Locked (already-reviewed) conversations are skipped."""
     if data is None:
         data = load()
