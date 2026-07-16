@@ -73,6 +73,10 @@ a:hover { text-decoration: underline; }
 .convtable td.c-count { font-variant-numeric: tabular-nums; }
 .convtable .title { font-size: 14px; }
 .convtable .score { font-size: 12px; margin-left: 7px; white-space: nowrap; }
+/* marks a search hit whose match lives on a side branch, not the default newest path */
+.sidebranch { font-size: 11px; margin-left: 7px; padding: 1px 8px; border-radius: 999px;
+              border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+              color: var(--accent); white-space: nowrap; }
 .snip { margin-top: 4px; font-size: 13px; line-height: 1.45; background: var(--code); padding: 6px 9px; border-radius: 5px; white-space: pre-wrap; word-break: break-word; }
 mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
 .pager { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 26px; color: var(--muted); }

@@ -59,6 +59,7 @@
         <a class="title" href="{% if r.deep_leaf %}{{ url_for('conversation', uuid=r.uuid, leaf=r.deep_leaf, _anchor='m-' ~ r.deep_anchor) }}{% else %}{{ url_for('conversation', uuid=r.uuid) }}{% endif %}">{{ r.name or '(untitled)' }}</a>
         {% if r.categories %}<span class="tags">{% for s in r.categories %}<span class="tag tag-{{ s }} {{ 'proposal' if tag_methods.get(r.uuid, {}).get(s) == 'semantic' }}">{{ category_label.get(s, s) }}</span>{% endfor %}</span>{% endif %}
         {% if r.score is not none %}<span class="score muted">score {{ '%.3f' | format(r.score) }}</span>{% endif %}
+        {% if r.deep_side_branch %}<span class="sidebranch" title="this match is on an edited or abandoned draft, not the default (newest) path">side branch</span>{% endif %}
         {% if r.snippet %}<div class="snip">{{ r.snippet | highlight }}</div>{% endif %}
       </td>
     </tr>

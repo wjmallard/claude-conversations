@@ -852,11 +852,37 @@ def newest_leaf_for_messages(conn, msg_uuids):
         LEFT JOIN messages ch ON ch.parent_uuid = s.node
         WHERE ch.uuid IS NULL
         ORDER BY s.start,
-                 n.created_at DESC NULLS LAST
+                 n.created_at DESC NULLS LAST,
+                 n.seq DESC
         """,
         {"ids": ids},
     ).fetchall()
     return {r["start"]: r["leaf"] for r in rows}
+
+
+def newest_leaf_by_conversation(conn, conv_uuids):
+    """Map each conversation uuid to its newest leaf -- the tip of the default path the
+    detail view shows. Used to tell whether a search hit sits on that path or off on a
+    side branch. Same ordering as conversation_leaves, so it agrees with that default."""
+    ids = [u for u in dict.fromkeys(conv_uuids) if u]
+    if not ids:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT DISTINCT ON (m.conv_uuid)
+            m.conv_uuid,
+            m.uuid AS leaf
+        FROM messages m
+        LEFT JOIN messages c ON c.parent_uuid = m.uuid
+        WHERE m.conv_uuid = ANY(%(ids)s)
+          AND c.uuid IS NULL
+        ORDER BY m.conv_uuid,
+                 m.created_at DESC NULLS LAST,
+                 m.seq DESC
+        """,
+        {"ids": ids},
+    ).fetchall()
+    return {r["conv_uuid"]: r["leaf"] for r in rows}
 
 
 def conversations_by_uuids(conn, uuids):
