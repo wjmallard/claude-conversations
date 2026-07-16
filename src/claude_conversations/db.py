@@ -132,6 +132,7 @@ def search_fulltext(
         parts.append(f"""
             SELECT
                 m.conv_uuid,
+                m.uuid AS msg_uuid,
                 m.text AS snip_src,
                 ts_rank(m.text_tsv, q.tsq) AS r
             FROM messages m, q
@@ -140,6 +141,7 @@ def search_fulltext(
         parts.append(f"""
             SELECT
                 m.conv_uuid,
+                m.uuid AS msg_uuid,
                 left(m.tool_text, {_TOOL_CAP}) AS snip_src,
                 ts_rank(to_tsvector('english', left(m.tool_text, {_TOOL_CAP})), q.tsq) AS r
             FROM messages m, q
@@ -149,6 +151,7 @@ def search_fulltext(
         parts.append("""
             SELECT
                 c.uuid AS conv_uuid,
+                NULL::text AS msg_uuid,
                 c.name AS snip_src,
                 ts_rank(to_tsvector('english', c.name), q.tsq) * 3 AS r
             FROM conversations c, q
@@ -159,6 +162,7 @@ def search_fulltext(
         parts.append("""
             SELECT
                 c.uuid AS conv_uuid,
+                NULL::text AS msg_uuid,
                 c.summary AS snip_src,
                 ts_rank(to_tsvector('english', c.summary), q.tsq) * 2 AS r
             FROM conversations c, q
@@ -181,7 +185,8 @@ def search_fulltext(
             SELECT
                 conv_uuid,
                 max(r) AS score,
-                (array_agg(snip_src ORDER BY r DESC))[1] AS best_text
+                (array_agg(snip_src ORDER BY r DESC))[1] AS best_text,
+                (array_agg(msg_uuid ORDER BY r DESC))[1] AS best_msg
             FROM all_hits
             GROUP BY conv_uuid
         )
@@ -193,6 +198,7 @@ def search_fulltext(
             c.n_messages,
             c.categories,
             b.score,
+            b.best_msg,
             ts_headline('english', b.best_text, (SELECT tsq FROM q), %(opts)s) AS snippet
         FROM best b
         JOIN conversations c ON c.uuid = b.conv_uuid
@@ -266,6 +272,7 @@ def search_trigram(
         parts.append(f"""
             SELECT
                 m.conv_uuid,
+                m.uuid AS msg_uuid,
                 m.text AS snip_src,
                 word_similarity(%(query)s, m.text) AS r
             FROM messages m
@@ -274,6 +281,7 @@ def search_trigram(
         parts.append(f"""
             SELECT
                 m.conv_uuid,
+                m.uuid AS msg_uuid,
                 left(m.tool_text, {_TOOL_CAP}) AS snip_src,
                 word_similarity(%(query)s, left(m.tool_text, {_TOOL_CAP})) AS r
             FROM messages m
@@ -283,6 +291,7 @@ def search_trigram(
         parts.append("""
             SELECT
                 c.uuid AS conv_uuid,
+                NULL::text AS msg_uuid,
                 c.name AS snip_src,
                 word_similarity(%(query)s, c.name) * 1.5 AS r
             FROM conversations c
@@ -292,6 +301,7 @@ def search_trigram(
         parts.append("""
             SELECT
                 c.uuid AS conv_uuid,
+                NULL::text AS msg_uuid,
                 c.summary AS snip_src,
                 word_similarity(%(query)s, c.summary) AS r
             FROM conversations c
@@ -311,7 +321,8 @@ def search_trigram(
             SELECT
                 conv_uuid,
                 max(r) AS score,
-                (array_agg(snip_src ORDER BY r DESC))[1] AS best_text
+                (array_agg(snip_src ORDER BY r DESC))[1] AS best_text,
+                (array_agg(msg_uuid ORDER BY r DESC))[1] AS best_msg
             FROM all_hits
             GROUP BY conv_uuid
         )
@@ -323,6 +334,7 @@ def search_trigram(
             c.n_messages,
             c.categories,
             b.score,
+            b.best_msg,
             left(b.best_text, 300) AS snippet
         FROM best b
         JOIN conversations c ON c.uuid = b.conv_uuid
@@ -402,6 +414,7 @@ def search_semantic(
         WITH scores AS (
             SELECT
                 m.conv_uuid,
+                m.msg_uuid,
                 m.text,
                 1 - (e.embedding <=> %(vec)s::vector) AS s
             FROM message_chunks m
@@ -412,7 +425,8 @@ def search_semantic(
             SELECT
                 conv_uuid,
                 max(s) AS score,
-                (array_agg(text ORDER BY s DESC))[1] AS best_text
+                (array_agg(text ORDER BY s DESC))[1] AS best_text,
+                (array_agg(msg_uuid ORDER BY s DESC))[1] AS best_msg
             FROM scores
             WHERE s >= %(min_score)s
             GROUP BY conv_uuid
@@ -425,6 +439,7 @@ def search_semantic(
             c.n_messages,
             c.categories,
             b.score,
+            b.best_msg,
             left(b.best_text, 300) AS snippet
         FROM best b
         JOIN conversations c ON c.uuid = b.conv_uuid
@@ -804,6 +819,44 @@ def branch_nav(conn, conv_uuid):
         "children": children,
         "newest_leaf": newest_leaf,
     }
+
+
+def newest_leaf_for_messages(conn, msg_uuids):
+    """Map each message uuid to the newest leaf in its subtree -- the branch tip to open
+    so a search hit lands on a path that actually contains it (an interior match is not
+    itself a leaf, and may sit off the default newest path). Batched for a page of
+    results; a message with no descendants maps to itself, and unknown ids are absent."""
+    ids = [u for u in dict.fromkeys(msg_uuids) if u]
+    if not ids:
+        return {}
+    rows = conn.execute(
+        """
+        WITH RECURSIVE sub AS (
+            SELECT
+                uuid AS start,
+                uuid AS node
+            FROM messages
+            WHERE uuid = ANY(%(ids)s)
+            UNION ALL
+            SELECT
+                s.start,
+                c.uuid
+            FROM sub s
+            JOIN messages c ON c.parent_uuid = s.node
+        )
+        SELECT DISTINCT ON (s.start)
+            s.start,
+            s.node AS leaf
+        FROM sub s
+        JOIN messages n ON n.uuid = s.node
+        LEFT JOIN messages ch ON ch.parent_uuid = s.node
+        WHERE ch.uuid IS NULL
+        ORDER BY s.start,
+                 n.created_at DESC NULLS LAST
+        """,
+        {"ids": ids},
+    ).fetchall()
+    return {r["start"]: r["leaf"] for r in rows}
 
 
 def conversations_by_uuids(conn, uuids):

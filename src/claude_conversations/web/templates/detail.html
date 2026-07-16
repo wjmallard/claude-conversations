@@ -130,6 +130,17 @@
       var leaf = (e.state && e.state.leaf) || leafOf(location.search);
       if (leaf) swap(leaf, null, false);
     });
+
+    // Arrived from a search hit (#m-<uuid>): center it and flash it so it stands out.
+    var hh = location.hash;
+    if (/^#m-[0-9a-fA-F-]{36}$/.test(hh)) {
+      var hit = document.getElementById(hh.slice(1));
+      if (hit) {
+        hit.scrollIntoView({ block: 'center' });
+        hit.classList.add('hit');
+        setTimeout(function () { hit.classList.remove('hit'); }, 2200);
+      }
+    }
   })();
 </script>
 {% endblock %}

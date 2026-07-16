@@ -25,6 +25,7 @@ from claude_conversations.db import (
     get_conn,
     get_conversation,
     list_conversations,
+    newest_leaf_for_messages,
     search_fulltext,
     search_semantic,
     search_trigram,
@@ -139,6 +140,23 @@ def _parse_date(s):
         return None
 
 
+def _attach_deep_links(conn, results):
+    """Point each search result at the branch its best match lives on. Resolves the
+    matched message to its branch tip (newest descendant leaf) and stashes both on the
+    row, so the result links straight to that path and anchors on the message. A row
+    whose top hit was a title/summary match carries no message and opens the default
+    path."""
+    ids = [r["best_msg"] for r in results if r.get("best_msg")]
+    if not ids:
+        return
+    leaves = newest_leaf_for_messages(conn, ids)
+    for r in results:
+        mid = r.get("best_msg")
+        if mid and leaves.get(mid):
+            r["deep_anchor"] = mid
+            r["deep_leaf"] = leaves[mid]
+
+
 @app.route("/")
 def index():
     q = request.args.get("q", "").strip()
@@ -231,6 +249,8 @@ def index():
                 date_from=df,
                 date_to=dt,
             )
+        if q:
+            _attach_deep_links(conn, results)
 
     total_pages = (total + PER_PAGE - 1) // PER_PAGE if total else 0
     return render_template(

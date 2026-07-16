@@ -94,6 +94,12 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .msg.human { border-left: 3px solid var(--human); }
 .msg.assistant { border-left: 3px solid var(--asst); }
 .who { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
+/* a search hit deep-linked via #m-<uuid>: brief flash to locate it in the thread */
+.msg.hit { animation: msg-hit 2.2s ease-out; }
+@keyframes msg-hit {
+  0% { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+  100% { background: var(--card); }
+}
 
 .content :first-child { margin-top: 0; }
 .content :last-child { margin-bottom: 0; }
