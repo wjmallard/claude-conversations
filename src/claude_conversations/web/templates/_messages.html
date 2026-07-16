@@ -1,0 +1,34 @@
+{# The rendered path: one article per message, and ABOVE each forked turn a standalone
+   branch strip (prev/next arrows around one dot per draft, current filled). The strip is
+   its own control sitting at the fork point -- between the shared parent and the drafted
+   box -- so it introduces the box below it; it is NOT part of the bubble. Rendered whole
+   on load and re-fetched alone (?partial=1) for the client-side swap. #}
+{% for m in messages %}
+{% if m.branch %}
+{# data-anchor is the fork's parent (the last shared message, just above this strip); the
+   swap pins it so your place holds and only the content below the strip changes. #}
+<nav class="branchnav" data-anchor="{{ m.branch.anchor or '' }}" aria-label="draft {{ m.branch.index }} of {{ m.branch.total }}">
+  {% if m.branch.prev_leaf %}
+  <a class="bn-arrow" href="{{ url_for('conversation', uuid=uuid, leaf=m.branch.prev_leaf) }}" rel="nofollow" aria-label="previous draft">&lsaquo;</a>
+  {% else %}<span class="bn-arrow bn-off" aria-hidden="true">&lsaquo;</span>{% endif %}
+  <span class="bn-dots">
+    {% for d in m.branch.drafts %}
+      {% if d.current %}
+      <span class="bn-dot on" aria-current="true" title="draft {{ d.index }}/{{ m.branch.total }} &middot; {{ d.created_at | fmt_ts }} (current)"><span class="bn-pip"></span><span class="bn-num">{{ d.index }}</span></span>
+      {% else %}
+      <a class="bn-dot" href="{{ url_for('conversation', uuid=uuid, leaf=d.leaf) }}" rel="nofollow" aria-label="draft {{ d.index }}" title="draft {{ d.index }}/{{ m.branch.total }} &middot; {{ d.created_at | fmt_ts }} &middot; {{ d.preview or '(empty)' }}"><span class="bn-pip"></span><span class="bn-num">{{ d.index }}</span></a>
+      {% endif %}
+    {% endfor %}
+  </span>
+  {% if m.branch.next_leaf %}
+  <a class="bn-arrow" href="{{ url_for('conversation', uuid=uuid, leaf=m.branch.next_leaf) }}" rel="nofollow" aria-label="next draft">&rsaquo;</a>
+  {% else %}<span class="bn-arrow bn-off" aria-hidden="true">&rsaquo;</span>{% endif %}
+</nav>
+{% endif %}
+<article id="m-{{ m.uuid }}" class="msg {{ m.sender }}">
+  <div class="who">{{ '🧑' if m.sender == 'human' else '🤖' }} {{ m.sender }}{% if m.created_at %} <span class="muted">&middot; {{ m.created_at | fmt_ts }}</span>{% endif %}</div>
+  <div class="content">{{ m.html }}</div>
+  {% if m.files %}<div class="attach">📎 {{ m.files | join(', ') }}</div>{% endif %}
+</article>
+{% endfor %}
+{% if not messages %}<p class="muted">(no messages in this transcript)</p>{% endif %}

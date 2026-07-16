@@ -7,10 +7,11 @@ from datetime import date, datetime
 from flask import Flask, Response, abort, redirect, render_template, request, url_for
 from markupsafe import Markup, escape
 
-from claude_conversations import categories, classifier, config, render
+from claude_conversations import categories, classifier, config, parse, render
 from claude_conversations.db import (
     HL_START,
     HL_STOP,
+    branch_nav,
     category_facets,
     check_db,
     conversation_leaves,
@@ -251,6 +252,44 @@ def index():
     )
 
 
+def _branch_switchers(nav, raws):
+    """One entry per message on the rendered path (aligned with `raws`, root->leaf):
+    None where the message has no alternate drafts, else the switcher's view model --
+    {index, total, prev_leaf, next_leaf, drafts}. Each draft carries the leaf to select
+    when it is chosen (the newest tip of that branch)."""
+    children = nav["children"]
+    newest_leaf = nav["newest_leaf"]
+    out = []
+    for r in raws:
+        node_uuid = r.get("uuid")
+        siblings = children.get(parse.parent_uuid(r), [])
+        if len(siblings) <= 1:
+            out.append(None)
+            continue
+        drafts, current = [], 0
+        for i, s in enumerate(siblings, 1):
+            is_current = s["uuid"] == node_uuid
+            if is_current:
+                current = i
+            drafts.append({
+                "index": i,
+                "leaf": newest_leaf.get(s["uuid"]) or s["uuid"],
+                "created_at": s["created_at"],
+                "preview": s["preview"],
+                "current": is_current,
+                "sender": s["sender"],
+            })
+        out.append({
+            "anchor": parse.parent_uuid(r),  # fork parent: the last shared message
+            "index": current,
+            "total": len(siblings),
+            "prev_leaf": drafts[current - 2]["leaf"] if current > 1 else None,
+            "next_leaf": drafts[current]["leaf"] if 0 < current < len(siblings) else None,
+            "drafts": drafts,
+        })
+    return out
+
+
 @app.route("/c/<uuid>")
 def conversation(uuid):
     if not _UUID_RE.match(uuid):
@@ -270,7 +309,20 @@ def conversation(uuid):
         if leaf not in {row["uuid"] for row in leaves}:
             leaf = leaves[0]["uuid"] if leaves else None
         raws = conversation_path(conn, uuid, leaf) if leaf else conversation_raw(conn, uuid)
+        # The switcher (which drafts sit at each fork) is only meaningful when the
+        # conversation actually branches; a linear thread skips the extra queries.
+        nav = branch_nav(conn, uuid) if len(leaves) > 1 else None
     messages = [render.render_message(m) for m in raws]
+    if nav:
+        for msg, switcher in zip(messages, _branch_switchers(nav, raws)):
+            msg["branch"] = switcher
+    if request.args.get("partial"):
+        # Just the thread markup, for the client-side branch swap (which keeps the reader's
+        # place instead of reloading to the top); the new path length rides in a header.
+        return Response(
+            render_template("_messages.html", messages=messages, uuid=uuid),
+            headers={"X-Path-Len": str(len(messages))},
+        )
     return render_template(
         "detail.html",
         meta=meta,
@@ -278,6 +330,7 @@ def conversation(uuid):
         uuid=uuid,
         leaf=leaf,
         n_leaves=len(leaves),
+        path_len=len(messages),
     )
 
 

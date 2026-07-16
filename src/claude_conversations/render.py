@@ -160,12 +160,13 @@ def _file_names(msg) -> list[str]:
 
 
 def render_message(msg) -> dict:
-    """Return a view model: {sender, created_at, html, files}."""
+    """Return a view model: {uuid, sender, created_at, html, files}."""
     html = render_blocks(msg.get("content"))
     if not html and msg.get("text"):
         html = _md(str(msg["text"]))
     html += _render_attachments(msg)
     return {
+        "uuid": msg.get("uuid"),
         "sender": msg.get("sender") or "?",
         "created_at": msg.get("created_at"),
         "html": html,

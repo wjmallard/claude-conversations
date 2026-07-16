@@ -730,6 +730,82 @@ def conversation_path(conn, conv_uuid, leaf_uuid):
     return [r["raw"] for r in rows if r["raw"] is not None]
 
 
+def branch_nav(conn, conv_uuid):
+    """Data for the per-message branch switcher: the drafts at each fork and where each
+    one leads. Cheap enough to compute per detail-page load (a conversation is small).
+
+    Returns {"children": ..., "newest_leaf": ...}:
+      children    -- parent uuid (None for a conversation head) -> that slot's drafts,
+                     oldest first: [{uuid, created_at, sender, preview}]. A slot with
+                     more than one draft is a fork, and the message on the current path
+                     is where the switcher shows.
+      newest_leaf -- message uuid -> the newest leaf in its subtree. Switching to a draft
+                     selects this leaf, so the reader lands on that branch's most recent
+                     tip rather than on an interior node.
+    """
+    child_rows = conn.execute(
+        """
+        SELECT
+            uuid,
+            parent_uuid,
+            created_at,
+            sender,
+            left(regexp_replace(text, '[[:space:]]+', ' ', 'g'), 90) AS preview
+        FROM messages
+        WHERE conv_uuid = %(uuid)s
+        ORDER BY created_at ASC NULLS LAST,
+                 seq ASC
+        """,
+        {"uuid": conv_uuid},
+    ).fetchall()
+    children = {}
+    for r in child_rows:
+        children.setdefault(r["parent_uuid"], []).append({
+            "uuid": r["uuid"],
+            "created_at": r["created_at"],
+            "sender": r["sender"],
+            "preview": r["preview"] or "",
+        })
+    # Newest leaf per node in one pass: seed every leaf, then propagate each leaf up
+    # through its ancestors; DISTINCT ON keeps the newest leaf that reaches each node.
+    leaf_rows = conn.execute(
+        """
+        WITH RECURSIVE climb AS (
+            SELECT
+                m.uuid AS leaf_uuid,
+                m.created_at AS leaf_at,
+                m.uuid AS node,
+                m.parent_uuid
+            FROM messages m
+            LEFT JOIN messages c ON c.parent_uuid = m.uuid
+            WHERE m.conv_uuid = %(uuid)s
+              AND c.uuid IS NULL
+            UNION ALL
+            SELECT
+                cl.leaf_uuid,
+                cl.leaf_at,
+                p.uuid,
+                p.parent_uuid
+            FROM climb cl
+            JOIN messages p ON p.uuid = cl.parent_uuid
+            WHERE p.conv_uuid = %(uuid)s
+        )
+        SELECT DISTINCT ON (node)
+            node,
+            leaf_uuid
+        FROM climb
+        ORDER BY node,
+                 leaf_at DESC NULLS LAST
+        """,
+        {"uuid": conv_uuid},
+    ).fetchall()
+    newest_leaf = {r["node"]: r["leaf_uuid"] for r in leaf_rows}
+    return {
+        "children": children,
+        "newest_leaf": newest_leaf,
+    }
+
+
 def conversations_by_uuids(conn, uuids):
     """Look up conversation rows for a list of uuids, keyed by uuid (review queue)."""
     if not uuids:

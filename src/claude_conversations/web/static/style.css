@@ -105,6 +105,26 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .content th, .content td { border: 1px solid var(--line); padding: 4px 8px; }
 .content blockquote { margin: .5em 0; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
 
+/* branch switcher: a standalone strip below a forked turn -- prev/next arrows around one
+   dot per draft (current filled). Centered and thin so forks read at a glance without
+   crowding the thread; clicking swaps the path in place (see detail.html). */
+.branchnav { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 13px 0 0; }
+/* the strip heads the box below it (a fork's drafted turn), so the box hugs the strip */
+.branchnav + .msg { margin-top: 5px; }
+.bn-arrow { color: var(--muted); font-size: 18px; line-height: 1; padding: 1px 7px; border-radius: 6px; text-decoration: none; }
+.bn-arrow:hover { color: var(--fg); background: var(--code); text-decoration: none; }
+.bn-off { opacity: .22; pointer-events: none; }
+.bn-dots { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px 10px; max-width: 74%; }
+.bn-dot { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; text-decoration: none; }
+.bn-dot.on { cursor: default; }
+.bn-pip { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); background: transparent;
+          box-sizing: border-box; transition: transform .1s ease, background .1s, border-color .1s; }
+.bn-num { font-size: 10px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+a.bn-dot:hover .bn-pip { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 45%, transparent); transform: scale(1.4); }
+a.bn-dot:hover .bn-num { color: var(--fg); }
+.bn-dot.on .bn-pip { background: var(--accent); border-color: var(--accent); transform: scale(1.15); }
+.bn-dot.on .bn-num { color: var(--accent); font-weight: 600; }
+
 /* collapsible blocks (thinking / tool_use / tool_result) */
 .blk { margin: 8px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .blk > summary { cursor: pointer; padding: 6px 11px; font-size: 13px; color: var(--muted); user-select: none; }

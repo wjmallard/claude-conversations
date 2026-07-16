@@ -7,8 +7,8 @@
   <div class="meta">
     {{ meta.created_at | fmt_ts }}{% if meta.updated_at %} &rarr; {{ meta.updated_at | fmt_ts }}{% endif %}
     {% if n_leaves and n_leaves > 1 %}
-    &middot; {{ messages | length }} of {{ meta.n_messages }} messages
-    &middot; <span class="muted">newest of {{ n_leaves }} branches</span>
+    &middot; <span id="pathlen">{{ path_len }}</span> of {{ meta.n_messages }} messages
+    &middot; <span class="muted">{{ n_leaves }} branches</span>
     {% else %}
     &middot; {{ meta.n_messages }} messages
     {% endif %}
@@ -52,12 +52,84 @@
   {% endif %}
 </div>
 
-{% for m in messages %}
-<article class="msg {{ m.sender }}">
-  <div class="who">{{ '🧑' if m.sender == 'human' else '🤖' }} {{ m.sender }}{% if m.created_at %} <span class="muted">· {{ m.created_at | fmt_ts }}</span>{% endif %}</div>
-  <div class="content">{{ m.html }}</div>
-  {% if m.files %}<div class="attach">📎 {{ m.files | join(', ') }}</div>{% endif %}
-</article>
-{% endfor %}
-{% if not messages %}<p class="muted">(no messages in this transcript)</p>{% endif %}
+<div id="thread" data-uuid="{{ uuid }}" data-leaf="{{ leaf or '' }}">
+{% include "_messages.html" %}
+</div>
+{# Reserved scroll room: when switching to a short branch leaves the page too short to
+   hold the fork in place, the swap grows this so the pin is reachable (see below). #}
+<div id="thread-pad" aria-hidden="true"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Branch switching without losing your place. The dots/arrows are real links (they
+  // work with JS off); here we intercept them, fetch just the new path, swap the thread
+  // in place, and pin the fork's parent message so the page does not jump to the top.
+  (function () {
+    var thread = document.getElementById('thread');
+    if (!thread) return;
+    var pad = document.getElementById('thread-pad');
+    var uuid = thread.dataset.uuid;
+    if (history.scrollRestoration) history.scrollRestoration = 'manual';
+
+    function leafOf(href) {
+      var m = /[?&]leaf=([0-9a-fA-F-]{36})/.exec(href || '');
+      return m ? m[1] : null;
+    }
+
+    // Canonicalize the initial URL to carry the resolved leaf, so Back always has one.
+    var current = thread.dataset.leaf;
+    if (current && !leafOf(location.search)) {
+      history.replaceState({ leaf: current }, '', '/c/' + uuid + '?leaf=' + current);
+    }
+
+    function swap(leaf, anchorId, push) {
+      var anchor = anchorId ? document.getElementById('m-' + anchorId) : null;
+      var y0 = anchor ? anchor.getBoundingClientRect().top : null;
+      var url = '/c/' + uuid + '?leaf=' + leaf;
+      fetch(url + '&partial=1', { headers: { 'X-Requested-With': 'fetch' } })
+        .then(function (r) {
+          if (!r.ok) throw 0;
+          var len = r.headers.get('X-Path-Len');
+          return r.text().then(function (html) { return { html: html, len: len }; });
+        })
+        .then(function (res) {
+          if (pad) pad.style.height = '0px';   // release old reserved room before measuring
+          thread.innerHTML = res.html;
+          if (anchorId && y0 != null) {
+            var a2 = document.getElementById('m-' + anchorId);
+            if (a2) {
+              // Hold the fork's parent at the same screen spot. Switching to a short
+              // branch can leave the page too short to scroll there, so reserve exactly
+              // the missing height below -- the dead space that stops the box jumping.
+              var target = a2.getBoundingClientRect().top + window.pageYOffset - y0;
+              var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+              if (pad && target > maxScroll) pad.style.height = Math.ceil(target - maxScroll) + 'px';
+              window.scrollTo(0, Math.max(0, target));
+            }
+          }
+          var pl = document.getElementById('pathlen');
+          if (pl && res.len) pl.textContent = res.len;
+          if (push) history.pushState({ leaf: leaf }, '', url);
+        })
+        .catch(function () { window.location = url; });  // fall back to a full load
+    }
+
+    // One delegated listener survives every thread swap.
+    thread.addEventListener('click', function (e) {
+      var a = e.target.closest('a.bn-arrow, a.bn-dot');
+      if (!a || !thread.contains(a)) return;
+      var leaf = leafOf(a.getAttribute('href'));
+      if (!leaf) return;
+      e.preventDefault();
+      var nav = a.closest('.branchnav');
+      swap(leaf, nav && nav.dataset.anchor ? nav.dataset.anchor : null, true);
+    });
+
+    window.addEventListener('popstate', function (e) {
+      var leaf = (e.state && e.state.leaf) || leafOf(location.search);
+      if (leaf) swap(leaf, null, false);
+    });
+  })();
+</script>
 {% endblock %}
